@@ -68,61 +68,35 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   }
 }
 
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-  : Adafruit_GFX(p.w, p.h) {
-  _personality = p;
-  cs = cs_pin;
-  rst = rst_pin;
-  dc = dc_pin;
-  sclk = sclk_pin;
-  sid = sid_pin;
-  hwSPI = false;
-}
-
-// constructor for hardware SPI - we indicate DataCommand, ChipSelect, Reset
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-  : Adafruit_GFX(p.w, p.h) {
-  _personality = p;
-  dc = dc_pin;
-  rst = rst_pin;
-  cs = cs_pin;
-  hwSPI = true;
-}
-
-// initializer for I2C - we only indicate the reset pin!
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t reset_pin)
-  : Adafruit_GFX(p.w, p.h) {
-  _personality = p;
-  sclk = dc = cs = sid = -1;
-  rst = reset_pin;
-}
+Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, Connection conn)
+  : Adafruit_GFX(p.w, p.h), _personality(p), _conn(conn) {}
 
 void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset) {
   _vccstate = vccstate;
   _i2caddr = i2caddr;
 
   // set pin directions
-  if (sid != -1) {
-    pinMode(dc, OUTPUT);
-    pinMode(cs, OUTPUT);
+  if (_conn.sid != -1) {
+    pinMode(_conn.dc, OUTPUT);
+    pinMode(_conn.cs, OUTPUT);
 #ifdef HAVE_PORTREG
-    csport      = portOutputRegister(digitalPinToPort(cs));
-    cspinmask   = digitalPinToBitMask(cs);
-    dcport      = portOutputRegister(digitalPinToPort(dc));
-    dcpinmask   = digitalPinToBitMask(dc);
+    _conn.csport      = portOutputRegister(digitalPinToPort(_conn.cs));
+    _conn.cspinmask   = digitalPinToBitMask(_conn.cs);
+    _conn.dcport      = portOutputRegister(digitalPinToPort(_conn.dc));
+    _conn.dcpinmask   = digitalPinToBitMask(_conn.dc);
 #endif
-    if (!hwSPI) {
+    if (!_conn.hwSPI) {
       // set pins for software-SPI
-      pinMode(sid, OUTPUT);
-      pinMode(sclk, OUTPUT);
+      pinMode(_conn.sid, OUTPUT);
+      pinMode(_conn.sclk, OUTPUT);
 #ifdef HAVE_PORTREG
-      clkport     = portOutputRegister(digitalPinToPort(sclk));
-      clkpinmask  = digitalPinToBitMask(sclk);
-      mosiport    = portOutputRegister(digitalPinToPort(sid));
-      mosipinmask = digitalPinToBitMask(sid);
+      _conn.clkport     = portOutputRegister(digitalPinToPort(_conn.sclk));
+      _conn.clkpinmask  = digitalPinToBitMask(_conn.sclk);
+      _conn.mosiport    = portOutputRegister(digitalPinToPort(_conn.sid));
+      _conn.mosipinmask = digitalPinToBitMask(_conn.sid);
 #endif
     }
-    if (hwSPI) {
+    if (_conn.hwSPI) {
       SPI.begin();
 #ifdef SPI_HAS_TRANSACTION
       SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
@@ -139,18 +113,18 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
     TWI1->TWI_CWGR = ((VARIANT_MCK / (2 * 400000)) - 4) * 0x101;
 #endif
   }
-  if ((reset) && (rst >= 0)) {
+  if ((reset) && (_conn.rst >= 0)) {
     // Setup reset pin direction (used by both SPI and I2C)
-    pinMode(rst, OUTPUT);
-    digitalWrite(rst, HIGH);
+    pinMode(_conn.rst, OUTPUT);
+    digitalWrite(_conn.rst, HIGH);
     // VDD (3.3V) goes high at start, lets just chill for a ms
     delay(1);
     // bring reset low
-    digitalWrite(rst, LOW);
+    digitalWrite(_conn.rst, LOW);
     // wait 10ms
     delay(10);
     // bring out of reset
-    digitalWrite(rst, HIGH);
+    digitalWrite(_conn.rst, HIGH);
     // turn on VCC (9V?)
   }
 
@@ -205,23 +179,27 @@ void Adafruit_SSD1306_Core::invertDisplay(boolean i) {
 }
 
 void Adafruit_SSD1306_Core::ssd1306_command(uint8_t c) {
-  if (sid != -1) {
+  if (_conn.sid != -1) {
     // SPI
+
 #ifdef HAVE_PORTREG
-    *csport |= cspinmask;
-    *dcport &= ~dcpinmask;
-    *csport &= ~cspinmask;
+    *_conn.csport |= _conn.cspinmask;
+    *_conn.dcport &= ~_conn.dcpinmask;
+    *_conn.csport &= ~_conn.cspinmask;
 #else
-    digitalWrite(cs, HIGH);
-    digitalWrite(dc, LOW);
-    digitalWrite(cs, LOW);
+    digitalWrite(_conn.cs, HIGH);
+    digitalWrite(_conn.dc, LOW);
+    digitalWrite(_conn.cs, LOW);
 #endif
+
     fastSPIwrite(c);
+
 #ifdef HAVE_PORTREG
-    *csport |= cspinmask;
+    *_conn.csport |= _conn.cspinmask;
 #else
-    digitalWrite(cs, HIGH);
+    digitalWrite(_conn.cs, HIGH);
 #endif
+
   } else {
     // I2C
     uint8_t control = 0x00;   // Co = 0, D/C = 0
@@ -251,7 +229,7 @@ void Adafruit_SSD1306_Core::startscrollright(uint8_t start, uint8_t stop) {
 // Activate a right handed scroll for rows start through stop
 // Hint, the display is 16 rows tall. To scroll the whole display, run:
 // display.scrollright(0x00, 0x0F)
-void Adafruit_SSD1306_Core::startscrollleft(uint8_t start, uint8_t stop){
+void Adafruit_SSD1306_Core::startscrollleft(uint8_t start, uint8_t stop) {
   ssd1306_command(SSD1306_LEFT_HORIZONTAL_SCROLL);
   ssd1306_command(0X00);
   ssd1306_command(start);
@@ -266,7 +244,7 @@ void Adafruit_SSD1306_Core::startscrollleft(uint8_t start, uint8_t stop){
 // Activate a diagonal scroll for rows start through stop
 // Hint, the display is 16 rows tall. To scroll the whole display, run:
 // display.scrollright(0x00, 0x0F)
-void Adafruit_SSD1306_Core::startscrolldiagright(uint8_t start, uint8_t stop){
+void Adafruit_SSD1306_Core::startscrolldiagright(uint8_t start, uint8_t stop) {
   ssd1306_command(SSD1306_SET_VERTICAL_SCROLL_AREA);
   ssd1306_command(0X00);
   ssd1306_command(HEIGHT);
@@ -283,7 +261,7 @@ void Adafruit_SSD1306_Core::startscrolldiagright(uint8_t start, uint8_t stop){
 // Activate a diagonal scroll for rows start through stop
 // Hint, the display is 16 rows tall. To scroll the whole display, run:
 // display.scrollright(0x00, 0x0F)
-void Adafruit_SSD1306_Core::startscrolldiagleft(uint8_t start, uint8_t stop){
+void Adafruit_SSD1306_Core::startscrolldiagleft(uint8_t start, uint8_t stop) {
   ssd1306_command(SSD1306_SET_VERTICAL_SCROLL_AREA);
   ssd1306_command(0X00);
   ssd1306_command(HEIGHT);
@@ -329,26 +307,26 @@ void Adafruit_SSD1306_Core::display(void) {
   ssd1306_command(0); // Page start address (0 = reset)
   ssd1306_command((HEIGHT>>3) - 1); // Page end address
 
-  if (sid != -1)
+  if (_conn.sid != -1)
   {
     // SPI
 #ifdef HAVE_PORTREG
-    *csport |= cspinmask;
-    *dcport |= dcpinmask;
-    *csport &= ~cspinmask;
+    *_conn.csport |= _conn.cspinmask;
+    *_conn.dcport |= _conn.dcpinmask;
+    *_conn.csport &= ~_conn.cspinmask;
 #else
-    digitalWrite(cs, HIGH);
-    digitalWrite(dc, HIGH);
-    digitalWrite(cs, LOW);
+    digitalWrite(_conn.cs, HIGH);
+    digitalWrite(_conn.dc, HIGH);
+    digitalWrite(_conn.cs, LOW);
 #endif
 
     for (uint16_t i=0; i< bufsize(); i++) {
       fastSPIwrite(_personality.buffer[i]);
     }
 #ifdef HAVE_PORTREG
-    *csport |= cspinmask;
+    *_conn.csport |= _conn.cspinmask;
 #else
-    digitalWrite(cs, HIGH);
+    digitalWrite(_conn.cs, HIGH);
 #endif
   }
   else
@@ -387,21 +365,21 @@ void Adafruit_SSD1306_Core::clearDisplay(void) {
 
 
 inline void Adafruit_SSD1306_Core::fastSPIwrite(uint8_t d) {
-  if (hwSPI) {
+  if (_conn.hwSPI) {
     (void)SPI.transfer(d);
   } else {
     for (uint8_t bit = 0x80; bit; bit >>= 1) {
 #ifdef HAVE_PORTREG
-      *clkport &= ~clkpinmask;
+      *_conn.clkport &= ~_conn.clkpinmask;
       if (d & bit)
-        *mosiport |= mosipinmask;
+        *_conn.mosiport |= _conn.mosipinmask;
       else
-        *mosiport &= ~mosipinmask;
-      *clkport |= clkpinmask;
+        *_conn.mosiport &= ~_conn.mosipinmask;
+      *_conn.clkport |= _conn.clkpinmask;
 #else
-      digitalWrite(sclk, LOW);
-      digitalWrite(sid, d & bit ? HIGH : LOW);
-      digitalWrite(sclk, HIGH);
+      digitalWrite(_conn.sclk, LOW);
+      digitalWrite(_conn.sid, d & bit ? HIGH : LOW);
+      digitalWrite(_conn.sclk, HIGH);
 #endif
     }
   }

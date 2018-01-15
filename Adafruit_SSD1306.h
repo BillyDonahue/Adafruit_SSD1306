@@ -56,45 +56,6 @@ All text above, and the splash screen must be included in any redistribution
 // Address for 128x32 is 0x3C
 // Address for 128x64 is 0x3D (default) or 0x3C (if SA0 is grounded)
 
-/*=========================================================================
-    SSD1306 Displays
-    -----------------------------------------------------------------------
-    The driver is used in multiple displays (128x64, 128x32, etc.).
-    Select the appropriate display below to create an appropriately
-    sized framebuffer, etc.
-
-    SSD1306_128_64  128x64 pixel display
-
-    SSD1306_128_32  128x32 pixel display
-
-    SSD1306_96_16
-
-    -----------------------------------------------------------------------*/
-   #define SSD1306_128_64
-//   #define SSD1306_128_32
-//   #define SSD1306_96_16
-/*=========================================================================*/
-
-#if defined SSD1306_128_64 && defined SSD1306_128_32
-  #error "Only one SSD1306 display can be specified at once in SSD1306.h"
-#endif
-#if !defined SSD1306_128_64 && !defined SSD1306_128_32 && !defined SSD1306_96_16
-  #error "At least one SSD1306 display must be specified in SSD1306.h"
-#endif
-
-#if defined SSD1306_128_64
-  #define SSD1306_LCDWIDTH                  128
-  #define SSD1306_LCDHEIGHT                 64
-#endif
-#if defined SSD1306_128_32
-  #define SSD1306_LCDWIDTH                  128
-  #define SSD1306_LCDHEIGHT                 32
-#endif
-#if defined SSD1306_96_16
-  #define SSD1306_LCDWIDTH                  96
-  #define SSD1306_LCDHEIGHT                 16
-#endif
-
 #define SSD1306_SETCONTRAST 0x81
 #define SSD1306_DISPLAYALLON_RESUME 0xA4
 #define SSD1306_DISPLAYALLON 0xA5
@@ -151,9 +112,22 @@ public:
     uint8_t contrast_extvcc;
     uint8_t contrast;
   };
-  Adafruit_SSD1306_Core(Personality p, int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin);
-  Adafruit_SSD1306_Core(Personality p, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin);
-  Adafruit_SSD1306_Core(Personality p, int8_t rst_pin);
+  struct Connection {
+    Connection(int8_t sid, int8_t sclk, int8_t dc, int8_t rst, int8_t cs)
+      : sid(sid), sclk(sclk), dc(dc), rst(rst), cs(cs), hwSPI(false) {}
+    Connection(int8_t dc, int8_t rst, int8_t cs)
+      : sid(-1), sclk(-1), dc(dc), rst(rst), cs(cs), hwSPI(true) {}
+    Connection(int8_t rst)
+      : sid(-1), sclk(-1), dc(-1), rst(rst), cs(-1) {}
+
+    int8_t sid, sclk, dc, rst, cs;
+    boolean hwSPI;
+#ifdef HAVE_PORTREG
+    PortReg *mosiport, *clkport, *csport, *dcport;
+    PortMask mosipinmask, clkpinmask, cspinmask, dcpinmask;
+#endif
+  };
+  Adafruit_SSD1306_Core(Personality p, Connection conn);
 
   void startscrollright(uint8_t start, uint8_t stop);
   void startscrollleft(uint8_t start, uint8_t stop);
@@ -183,24 +157,24 @@ private:
   uint16_t bufsize() { return _personality.w * _personality.h / 8; }
 
   Personality _personality;
-  int8_t _i2caddr, _vccstate, sid, sclk, dc, rst, cs;
-  boolean hwSPI;
-
-#ifdef HAVE_PORTREG
-  PortReg *mosiport, *clkport, *csport, *dcport;
-  PortMask mosipinmask, clkpinmask, cspinmask, dcpinmask;
-#endif
+  Connection _conn;
+  int8_t _i2caddr;
+  int8_t _vccstate;
 };
 
 template <typename D>
 class Adafruit_SSD1306_Basic : public Adafruit_SSD1306_Core {
 public:
+  // software SPI
   Adafruit_SSD1306_Basic(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(D::personality(), sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin) {}
+    : Adafruit_SSD1306_Core(D::personality(), Connection{sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin}) {}
+  // hardware SPI - we indicate DataCommand, ChipSelect, Reset
   Adafruit_SSD1306_Basic(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(D::personality(), dc_pin, rst_pin, cs_pin) {}
+    : Adafruit_SSD1306_Core(D::personality(), Connection{dc_pin, rst_pin, cs_pin}) {}
+  // I2C - we only indicate the reset pin!
   explicit Adafruit_SSD1306_Basic(int8_t rst_pin)
-    : Adafruit_SSD1306_Core(D::personality(), rst_pin) {}
+    : Adafruit_SSD1306_Core(D::personality(), Connection{rst_pin}) {}
+  // I2C without reset
   Adafruit_SSD1306_Basic() : Adafruit_SSD1306_Basic(-1) {}
 
  private:
