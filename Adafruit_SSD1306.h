@@ -29,7 +29,7 @@ All text above, and the splash screen must be included in any redistribution
 #if defined(__SAM3X8E__)
  typedef volatile RwReg PortReg;
  typedef uint32_t PortMask;
- #define HAVE_PORTREG
+ #define SSD1306_HAVE_PORTREG
 #elif defined(ARDUINO_ARCH_SAMD)
 // not supported
 #elif defined(ESP8266) || defined(ESP32) || defined(ARDUINO_STM32_FEATHER) || defined(__arc__)
@@ -38,7 +38,7 @@ All text above, and the splash screen must be included in any redistribution
 #elif defined(__AVR__)
   typedef volatile uint8_t PortReg;
   typedef uint8_t PortMask;
-  #define HAVE_PORTREG
+  #define SSD1306_HAVE_PORTREG
 #else
   // chances are its 32 bit so assume that
   typedef volatile uint32_t PortReg;
@@ -112,20 +112,63 @@ public:
     uint8_t contrast_extvcc;
     uint8_t contrast;
   };
+
   struct Connection {
+    class BasicOutputPin {
+    public:
+      BasicOutputPin() : _p(-1) {}
+      explicit BasicOutputPin(int8_t pin)
+        : _p(pin)
+      {}
+
+      BasicOutputPin& operator=(bool b) {
+        digitalWrite(_p, b ? HIGH : LOW);
+        return *this;
+      }
+
+      bool connected() const { return _p >= 0; }
+      void outputMode() { pinMode(_p, OUTPUT); }
+
+    private:
+      int8_t _p;
+    };
+
+#if defined SSD1306_HAVE_PORTREG
+    class PortRegOutputPin : public BasicOutputPin {
+    public:
+      PortRegOutputPin() {}
+      PortRegOutputPin(int8_t pin)
+        : BasicOutputPin(pin),
+          _port(portOutputRegister(digitalPinToPort(pin))),
+          _mask(digitalPinToBitMask(pin)) {}
+
+      PortRegOutputPin& operator=(bool b) {
+        if (b) 
+          *_port |= _mask;
+        else
+          *_port &= ~_mask;
+        return *this;
+      }
+
+    private:
+      PortReg *_port;
+      PortMask _mask;
+    };
+    using Pin = PortRegOutputPin;
+#else
+    using Pin = BasicOutputPin;
+#endif
+
     Connection(int8_t sid, int8_t sclk, int8_t dc, int8_t rst, int8_t cs)
       : sid(sid), sclk(sclk), dc(dc), rst(rst), cs(cs), hwSPI(false) {}
     Connection(int8_t dc, int8_t rst, int8_t cs)
-      : sid(-1), sclk(-1), dc(dc), rst(rst), cs(cs), hwSPI(true) {}
+      : dc(dc), rst(rst), cs(cs), hwSPI(true) {}
     Connection(int8_t rst)
-      : sid(-1), sclk(-1), dc(-1), rst(rst), cs(-1) {}
+      : rst(rst) {}
+    Connection() {}
 
-    int8_t sid, sclk, dc, rst, cs;
+    Pin sid, sclk, dc, rst, cs;
     boolean hwSPI;
-#ifdef HAVE_PORTREG
-    PortReg *mosiport, *clkport, *csport, *dcport;
-    PortMask mosipinmask, clkpinmask, cspinmask, dcpinmask;
-#endif
   };
   Adafruit_SSD1306_Core(Personality p, Connection conn);
 
@@ -175,11 +218,8 @@ public:
   explicit Adafruit_SSD1306_Basic(int8_t rst_pin)
     : Adafruit_SSD1306_Core(D::personality(), Connection{rst_pin}) {}
   // I2C without reset
-  Adafruit_SSD1306_Basic() : Adafruit_SSD1306_Basic(-1) {}
-
- private:
-  D& asD() { return *this; }
-  const D& asD() const { return *this; }
+  Adafruit_SSD1306_Basic()
+    : Adafruit_SSD1306_Core(D::personality(), Connection{}) {}
 };
 
 class Adafruit_SSD1306_96x16

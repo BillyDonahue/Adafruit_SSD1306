@@ -35,7 +35,21 @@ All text above, and the splash screen below must be included in any redistributi
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
 
-void ssd1306_swap(int16_t& a, int16_t& b) { int16_t t = a; a = b; b = t; }
+namespace {
+void swap(int16_t& a, int16_t& b) { int16_t t = a; a = b; b = t; }
+
+struct FastI2CGuard {
+#ifdef TWBR
+  FastI2CGuard() : t(TWBR) {
+    TWBR = 12;  // upgrade to 400kHz!
+  }
+  ~FastI2CGuard() {
+    TWBR = t;
+  }
+  uint8_t t;  // save I2C bitrate
+#endif
+};
+}  // namespace
 
 // the most basic function, set a single pixel
 void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
@@ -45,7 +59,7 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   // check rotation, move pixel around if necessary
   switch (getRotation()) {
     case 1:
-      ssd1306_swap(x, y);
+      swap(x, y);
       x = WIDTH - x - 1;
       break;
     case 2:
@@ -53,7 +67,7 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
       y = HEIGHT - y - 1;
       break;
     case 3:
-      ssd1306_swap(x, y);
+      swap(x, y);
       y = HEIGHT - y - 1;
       break;
   }
@@ -76,26 +90,9 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   _i2caddr = i2caddr;
 
   // set pin directions
-  if (_conn.sid != -1) {
-    pinMode(_conn.dc, OUTPUT);
-    pinMode(_conn.cs, OUTPUT);
-#ifdef HAVE_PORTREG
-    _conn.csport      = portOutputRegister(digitalPinToPort(_conn.cs));
-    _conn.cspinmask   = digitalPinToBitMask(_conn.cs);
-    _conn.dcport      = portOutputRegister(digitalPinToPort(_conn.dc));
-    _conn.dcpinmask   = digitalPinToBitMask(_conn.dc);
-#endif
-    if (!_conn.hwSPI) {
-      // set pins for software-SPI
-      pinMode(_conn.sid, OUTPUT);
-      pinMode(_conn.sclk, OUTPUT);
-#ifdef HAVE_PORTREG
-      _conn.clkport     = portOutputRegister(digitalPinToPort(_conn.sclk));
-      _conn.clkpinmask  = digitalPinToBitMask(_conn.sclk);
-      _conn.mosiport    = portOutputRegister(digitalPinToPort(_conn.sid));
-      _conn.mosipinmask = digitalPinToBitMask(_conn.sid);
-#endif
-    }
+  if (_conn.sid.connected()) {
+    _conn.dc.outputMode();
+    _conn.cs.outputMode();
     if (_conn.hwSPI) {
       SPI.begin();
 #ifdef SPI_HAS_TRANSACTION
@@ -103,32 +100,33 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
 #else
       SPI.setClockDivider(4);
 #endif
+    } else {
+      // set pins for software-SPI
+      _conn.sid.outputMode();
+      _conn.sclk.outputMode();
     }
   } else {
     // I2C Init
     Wire.begin();
 #ifdef __SAM3X8E__
-    // Force 400 KHz I2C, rawr! (Uses pins 20, 21 for SDA, SCL)
+    // Force 400 kHz I2C, rawr! (Uses pins 20, 21 for SDA, SCL)
     TWI1->TWI_CWGR = 0;
     TWI1->TWI_CWGR = ((VARIANT_MCK / (2 * 400000)) - 4) * 0x101;
 #endif
   }
-  if ((reset) && (_conn.rst >= 0)) {
-    // Setup reset pin direction (used by both SPI and I2C)
-    pinMode(_conn.rst, OUTPUT);
-    digitalWrite(_conn.rst, HIGH);
-    // VDD (3.3V) goes high at start, lets just chill for a ms
-    delay(1);
-    // bring reset low
-    digitalWrite(_conn.rst, LOW);
-    // wait 10ms
-    delay(10);
-    // bring out of reset
-    digitalWrite(_conn.rst, HIGH);
+  if (reset && _conn.rst.connected()) {
+    _conn.rst.outputMode(); // Setup reset pin direction (used by both SPI and I2C)
+    _conn.rst = 1;
+    delay(1);           // VDD (3.3V) goes high at start, let's just chill for a ms
+    _conn.rst = 0;      // bring reset low
+    delay(10);          // wait 10ms
+    _conn.rst = 1;      // bring out of reset
     // turn on VCC (9V?)
   }
 
   const bool extvcc = (_vccstate == SSD1306_EXTERNALVCC);
+  uint8_t compins = _personality.compins;
+  uint8_t contrast = extvcc ? _personality.contrast_extvcc : _personality.contrast;
 
   // Init sequence
   ssd1306_command(SSD1306_DISPLAYOFF);                    // 0xAE
@@ -147,10 +145,6 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   ssd1306_command(0x00);                                  // 0x0 act like ks0108
   ssd1306_command(SSD1306_SEGREMAP | 0x1);
   ssd1306_command(SSD1306_COMSCANDEC);
-
-  uint8_t compins = _personality.compins;
-  uint8_t contrast = extvcc ? _personality.contrast_extvcc : _personality.contrast;
-
   ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
   ssd1306_command(compins);
 
@@ -179,27 +173,13 @@ void Adafruit_SSD1306_Core::invertDisplay(boolean i) {
 }
 
 void Adafruit_SSD1306_Core::ssd1306_command(uint8_t c) {
-  if (_conn.sid != -1) {
+  if (_conn.sid.connected()) {
     // SPI
-
-#ifdef HAVE_PORTREG
-    *_conn.csport |= _conn.cspinmask;
-    *_conn.dcport &= ~_conn.dcpinmask;
-    *_conn.csport &= ~_conn.cspinmask;
-#else
-    digitalWrite(_conn.cs, HIGH);
-    digitalWrite(_conn.dc, LOW);
-    digitalWrite(_conn.cs, LOW);
-#endif
-
+    _conn.cs = 1;
+    _conn.dc = 0;
+    _conn.cs = 0;
     fastSPIwrite(c);
-
-#ifdef HAVE_PORTREG
-    *_conn.csport |= _conn.cspinmask;
-#else
-    digitalWrite(_conn.cs, HIGH);
-#endif
-
+    _conn.cs = 1;
   } else {
     // I2C
     uint8_t control = 0x00;   // Co = 0, D/C = 0
@@ -307,41 +287,20 @@ void Adafruit_SSD1306_Core::display(void) {
   ssd1306_command(0); // Page start address (0 = reset)
   ssd1306_command((HEIGHT>>3) - 1); // Page end address
 
-  if (_conn.sid != -1)
-  {
+  if (_conn.sid.connected()) {
     // SPI
-#ifdef HAVE_PORTREG
-    *_conn.csport |= _conn.cspinmask;
-    *_conn.dcport |= _conn.dcpinmask;
-    *_conn.csport &= ~_conn.cspinmask;
-#else
-    digitalWrite(_conn.cs, HIGH);
-    digitalWrite(_conn.dc, HIGH);
-    digitalWrite(_conn.cs, LOW);
-#endif
-
-    for (uint16_t i=0; i< bufsize(); i++) {
+    _conn.cs = 1;
+    _conn.dc = 1;
+    _conn.cs = 0;
+    for (uint16_t i = 0, n = bufsize(); i < n; i++) {
       fastSPIwrite(_personality.buffer[i]);
     }
-#ifdef HAVE_PORTREG
-    *_conn.csport |= _conn.cspinmask;
-#else
-    digitalWrite(_conn.cs, HIGH);
-#endif
-  }
-  else
-  {
-    // save I2C bitrate
-#ifdef TWBR
-    uint8_t twbrbackup = TWBR;
-    TWBR = 12; // upgrade to 400KHz!
-#endif
-
-    //Serial.println(TWBR, DEC);
-    //Serial.println(TWSR & 0x3, DEC);
+    _conn.cs = 1;
+  } else {
+    FastI2CGuard turbo;
 
     // I2C
-    for (uint16_t i = 0; i < bufsize(); i++) {
+    for (uint16_t i = 0, n = bufsize(); i < n; i++) {
       // send a bunch of data in one xmission
       Wire.beginTransmission(_i2caddr);
       WIRE_WRITE(0x40);
@@ -352,9 +311,6 @@ void Adafruit_SSD1306_Core::display(void) {
       i--;
       Wire.endTransmission();
     }
-#ifdef TWBR
-    TWBR = twbrbackup;
-#endif
   }
 }
 
@@ -369,18 +325,9 @@ inline void Adafruit_SSD1306_Core::fastSPIwrite(uint8_t d) {
     (void)SPI.transfer(d);
   } else {
     for (uint8_t bit = 0x80; bit; bit >>= 1) {
-#ifdef HAVE_PORTREG
-      *_conn.clkport &= ~_conn.clkpinmask;
-      if (d & bit)
-        *_conn.mosiport |= _conn.mosipinmask;
-      else
-        *_conn.mosiport &= ~_conn.mosipinmask;
-      *_conn.clkport |= _conn.clkpinmask;
-#else
-      digitalWrite(_conn.sclk, LOW);
-      digitalWrite(_conn.sid, d & bit ? HIGH : LOW);
-      digitalWrite(_conn.sclk, HIGH);
-#endif
+      _conn.sclk = 0;
+      _conn.sid = d & bit;
+      _conn.sclk = 1;
     }
   }
 }
@@ -394,7 +341,7 @@ void Adafruit_SSD1306_Core::drawFastHLine(int16_t x, int16_t y, int16_t w, uint1
     case 1:
       // 90 degree rotation, swap x & y for rotation, then invert x
       bSwap = true;
-      ssd1306_swap(x, y);
+      swap(x, y);
       x = WIDTH - x - 1;
       break;
     case 2:
@@ -406,7 +353,7 @@ void Adafruit_SSD1306_Core::drawFastHLine(int16_t x, int16_t y, int16_t w, uint1
     case 3:
       // 270 degree rotation, swap x & y for rotation, then invert y  and adjust y for w (not to become h)
       bSwap = true;
-      ssd1306_swap(x, y);
+      swap(x, y);
       y = HEIGHT - y - 1;
       y -= (w-1);
       break;
@@ -437,19 +384,27 @@ void Adafruit_SSD1306_Core::drawFastHLineInternal(int16_t x, int16_t y, int16_t 
   // if our width is now negative, punt
   if (w <= 0) { return; }
 
-  // set up the pointer for  movement through the buffer
-  register uint8_t *pBuf = _personality.buffer;
-  // adjust the buffer pointer for the current row
-  pBuf += (y/8) * WIDTH;
-  // and offset x columns in
-  pBuf += x;
-
+  // set up the pointer for movement through the buffer
+  register uint8_t *pBuf = _personality.buffer + (y / 8) * WIDTH + x;
   register uint8_t mask = 1 << (y&7);
 
   switch (color) {
-    case WHITE: while(w--) { *pBuf++ |= mask; }; break;
-    case BLACK: mask = ~mask;   while(w--) { *pBuf++ &= mask; }; break;
-    case INVERSE: while(w--) { *pBuf++ ^= mask; }; break;
+    case WHITE:
+      while (w--) {
+        *pBuf++ |= mask;
+      };
+      break;
+    case BLACK:
+      mask = ~mask;
+      while (w--) {
+        *pBuf++ &= mask;
+      };
+      break;
+    case INVERSE:
+      while (w--) {
+        *pBuf++ ^= mask;
+      };
+      break;
   }
 }
 
@@ -461,7 +416,7 @@ void Adafruit_SSD1306_Core::drawFastVLine(int16_t x, int16_t y, int16_t h, uint1
     case 1:
       // 90 degree rotation, swap x & y for rotation, then invert x and adjust x for h (now to become w)
       bSwap = true;
-      ssd1306_swap(x, y);
+      swap(x, y);
       x = WIDTH - x - 1;
       x -= (h-1);
       break;
@@ -474,7 +429,7 @@ void Adafruit_SSD1306_Core::drawFastVLine(int16_t x, int16_t y, int16_t h, uint1
     case 3:
       // 270 degree rotation, swap x & y for rotation, then invert y
       bSwap = true;
-      ssd1306_swap(x, y);
+      swap(x, y);
       y = HEIGHT - y - 1;
       break;
   }
@@ -485,7 +440,6 @@ void Adafruit_SSD1306_Core::drawFastVLine(int16_t x, int16_t y, int16_t h, uint1
     drawFastVLineInternal(x, y, h, color);
   }
 }
-
 
 void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t y, int16_t h, uint16_t color) {
   // do nothing if we're off the left or right side of the screen
