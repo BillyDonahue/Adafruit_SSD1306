@@ -59,7 +59,7 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   }
 
   // x is which column
-  uint8_t& byte = buffer[x + (y / 8) * WIDTH];
+  uint8_t& byte = _personality.buffer[x + (y / 8) * WIDTH];
   uint8_t mask = 1 << (y & 7);
   switch (color) {
     case WHITE:   byte |=  mask; break;
@@ -70,7 +70,7 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
 
 Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
   : Adafruit_GFX(p.w, p.h) {
-  buffer = p.buffer;
+  _personality = p;
   cs = cs_pin;
   rst = rst_pin;
   dc = dc_pin;
@@ -82,7 +82,7 @@ Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t sid_pin, int8
 // constructor for hardware SPI - we indicate DataCommand, ChipSelect, Reset
 Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
   : Adafruit_GFX(p.w, p.h) {
-  buffer = p.buffer;
+  _personality = p;
   dc = dc_pin;
   rst = rst_pin;
   cs = cs_pin;
@@ -92,7 +92,7 @@ Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t dc_pin, int8_
 // initializer for I2C - we only indicate the reset pin!
 Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, int8_t reset_pin)
   : Adafruit_GFX(p.w, p.h) {
-  buffer = p.buffer;
+  _personality = p;
   sclk = dc = cs = sid = -1;
   rst = reset_pin;
 }
@@ -162,7 +162,7 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   ssd1306_command(0x80);                                  // the suggested ratio 0x80
 
   ssd1306_command(SSD1306_SETMULTIPLEX);                  // 0xA8
-  ssd1306_command(SSD1306_LCDHEIGHT - 1);
+  ssd1306_command(HEIGHT - 1);
 
   ssd1306_command(SSD1306_SETDISPLAYOFFSET);              // 0xD3
   ssd1306_command(0x0);                                   // no offset
@@ -174,16 +174,8 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   ssd1306_command(SSD1306_SEGREMAP | 0x1);
   ssd1306_command(SSD1306_COMSCANDEC);
 
-#if defined SSD1306_128_32
-  uint8_t compins = 0x02;
-  uint8_t contrast = 0x8F;
-#elif defined SSD1306_128_64
-  uint8_t compins = 0x12;
-  uint8_t contrast = extvcc ? 0x9F : 0xCF;
-#elif defined SSD1306_96_16
-  uint8_t compins = 0x2;  //ada x12
-  uint8_t contrast = extvcc ? 0x10: 0xAF;
-#endif
+  uint8_t compins = _personality.compins;
+  uint8_t contrast = extvcc ? _personality.contrast_extvcc : _personality.contrast;
 
   ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
   ssd1306_command(compins);
@@ -244,7 +236,7 @@ void Adafruit_SSD1306_Core::ssd1306_command(uint8_t c) {
 // Activate a right handed scroll for rows start through stop
 // Hint, the display is 16 rows tall. To scroll the whole display, run:
 // display.scrollright(0x00, 0x0F)
-void Adafruit_SSD1306_Core::startscrollright(uint8_t start, uint8_t stop){
+void Adafruit_SSD1306_Core::startscrollright(uint8_t start, uint8_t stop) {
   ssd1306_command(SSD1306_RIGHT_HORIZONTAL_SCROLL);
   ssd1306_command(0X00);
   ssd1306_command(start);
@@ -277,7 +269,7 @@ void Adafruit_SSD1306_Core::startscrollleft(uint8_t start, uint8_t stop){
 void Adafruit_SSD1306_Core::startscrolldiagright(uint8_t start, uint8_t stop){
   ssd1306_command(SSD1306_SET_VERTICAL_SCROLL_AREA);
   ssd1306_command(0X00);
-  ssd1306_command(SSD1306_LCDHEIGHT);
+  ssd1306_command(HEIGHT);
   ssd1306_command(SSD1306_VERTICAL_AND_RIGHT_HORIZONTAL_SCROLL);
   ssd1306_command(0X00);
   ssd1306_command(start);
@@ -294,7 +286,7 @@ void Adafruit_SSD1306_Core::startscrolldiagright(uint8_t start, uint8_t stop){
 void Adafruit_SSD1306_Core::startscrolldiagleft(uint8_t start, uint8_t stop){
   ssd1306_command(SSD1306_SET_VERTICAL_SCROLL_AREA);
   ssd1306_command(0X00);
-  ssd1306_command(SSD1306_LCDHEIGHT);
+  ssd1306_command(HEIGHT);
   ssd1306_command(SSD1306_VERTICAL_AND_LEFT_HORIZONTAL_SCROLL);
   ssd1306_command(0X00);
   ssd1306_command(start);
@@ -331,19 +323,11 @@ void Adafruit_SSD1306_Core::dim(boolean dim) {
 void Adafruit_SSD1306_Core::display(void) {
   ssd1306_command(SSD1306_COLUMNADDR);
   ssd1306_command(0);   // Column start address (0 = reset)
-  ssd1306_command(SSD1306_LCDWIDTH-1); // Column end address (127 = reset)
+  ssd1306_command(WIDTH-1); // Column end address (127 = reset)
 
   ssd1306_command(SSD1306_PAGEADDR);
   ssd1306_command(0); // Page start address (0 = reset)
-  #if SSD1306_LCDHEIGHT == 64
-    ssd1306_command(7); // Page end address
-  #endif
-  #if SSD1306_LCDHEIGHT == 32
-    ssd1306_command(3); // Page end address
-  #endif
-  #if SSD1306_LCDHEIGHT == 16
-    ssd1306_command(1); // Page end address
-  #endif
+  ssd1306_command((HEIGHT>>3) - 1); // Page end address
 
   if (sid != -1)
   {
@@ -358,8 +342,8 @@ void Adafruit_SSD1306_Core::display(void) {
     digitalWrite(cs, LOW);
 #endif
 
-    for (uint16_t i=0; i<(SSD1306_LCDWIDTH*SSD1306_LCDHEIGHT/8); i++) {
-      fastSPIwrite(buffer[i]);
+    for (uint16_t i=0; i< bufsize(); i++) {
+      fastSPIwrite(_personality.buffer[i]);
     }
 #ifdef HAVE_PORTREG
     *csport |= cspinmask;
@@ -379,12 +363,12 @@ void Adafruit_SSD1306_Core::display(void) {
     //Serial.println(TWSR & 0x3, DEC);
 
     // I2C
-    for (uint16_t i=0; i<(SSD1306_LCDWIDTH*SSD1306_LCDHEIGHT/8); i++) {
+    for (uint16_t i = 0; i < bufsize(); i++) {
       // send a bunch of data in one xmission
       Wire.beginTransmission(_i2caddr);
       WIRE_WRITE(0x40);
       for (uint8_t x=0; x<16; x++) {
-        WIRE_WRITE(buffer[i]);
+        WIRE_WRITE(_personality.buffer[i]);
         i++;
       }
       i--;
@@ -398,7 +382,7 @@ void Adafruit_SSD1306_Core::display(void) {
 
 // clear everything
 void Adafruit_SSD1306_Core::clearDisplay(void) {
-  memset(buffer, 0, (SSD1306_LCDWIDTH*SSD1306_LCDHEIGHT/8));
+  memset(_personality.buffer, 0, bufsize());
 }
 
 
@@ -476,9 +460,9 @@ void Adafruit_SSD1306_Core::drawFastHLineInternal(int16_t x, int16_t y, int16_t 
   if (w <= 0) { return; }
 
   // set up the pointer for  movement through the buffer
-  register uint8_t *pBuf = buffer;
+  register uint8_t *pBuf = _personality.buffer;
   // adjust the buffer pointer for the current row
-  pBuf += (y/8) * SSD1306_LCDWIDTH;
+  pBuf += (y/8) * WIDTH;
   // and offset x columns in
   pBuf += x;
 
@@ -551,9 +535,9 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t y, int16_t 
   register uint8_t h_reg = h;
 
   // set up the pointer for fast movement through the buffer
-  register uint8_t *pBuf = buffer;
+  register uint8_t *pBuf = _personality.buffer;
   // adjust the buffer pointer for the current row
-  pBuf += (y_reg / 8) * SSD1306_LCDWIDTH;
+  pBuf += (y_reg / 8) * WIDTH;
   // and offset x columns in
   pBuf += x;
 
@@ -584,7 +568,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t y, int16_t 
 
     h_reg -= mod;
 
-    pBuf += SSD1306_LCDWIDTH;
+    pBuf += WIDTH;
   }
 
   // write solid bytes while we can - effectively doing 8 rows at a time
@@ -596,7 +580,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t y, int16_t 
         *pBuf = ~*pBuf;
 
         // adjust the buffer forward 8 rows worth of data
-        pBuf += SSD1306_LCDWIDTH;
+        pBuf += WIDTH;
 
         // adjust h & y (there's got to be a faster way for me to do this, but this should still help a fair bit for now)
         h_reg -= 8;
@@ -610,7 +594,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t y, int16_t 
         *pBuf = val;
 
         // adjust the buffer forward 8 rows worth of data
-        pBuf += SSD1306_LCDWIDTH;
+        pBuf += WIDTH;
 
         // adjust h & y (there's got to be a faster way for me to do this, but this should still help a fair bit for now)
         h_reg -= 8;
