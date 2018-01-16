@@ -106,6 +106,21 @@ All text above, and the splash screen must be included in any redistribution
 #define SSD1306_VERTICAL_AND_RIGHT_HORIZONTAL_SCROLL 0x29
 #define SSD1306_VERTICAL_AND_LEFT_HORIZONTAL_SCROLL 0x2A
 
+namespace Adafruit_SSD1306_helpers {
+
+template <size_t R>                         constexpr size_t Cmax() { return R; }
+template <size_t R, size_t N0, size_t...Ns> constexpr size_t Cmax() { return Cmax<((R>N0)?R:N0), Ns...>(); }
+
+template <typename...Ts>
+constexpr size_t maxAlign() {
+  return Cmax<alignof(Ts)...>();
+}
+template <typename...Ts>
+constexpr size_t maxSize() {
+  return Cmax<sizeof(Ts)...>();
+}
+
+}  // namespace Adafruit_SSD1306_helpers
 
 class Adafruit_SSD1306_Core : public Adafruit_GFX {
 public:
@@ -169,7 +184,9 @@ public:
     Connection(int8_t dc, int8_t rst, int8_t cs);
     explicit Connection(int8_t rst);
     Connection();
-    ~Connection();
+    ~Connection() {
+      delete _hw;
+    }
 
     void begin(uint8_t i2caddr);
     void fastSPIwrite(uint8_t d);
@@ -209,6 +226,10 @@ public:
     Pin rst;
     bool _isSpi;
     HwIface* _hw;
+
+    static constexpr size_t _hw_size = Adafruit_SSD1306_helpers::maxSize<I2c,Spi>();
+    static constexpr size_t _hw_align = Adafruit_SSD1306_helpers::maxAlign<I2c,Spi>();
+    alignas(_hw_align) char _hw_storage[_hw_size];
   };
   Adafruit_SSD1306_Core(Personality p, Connection conn);
 
