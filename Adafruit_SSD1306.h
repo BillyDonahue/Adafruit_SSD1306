@@ -104,15 +104,6 @@ All text above, and the splash screen must be included in any redistribution
 
 class Adafruit_SSD1306_Core : public Adafruit_GFX {
 public:
-  struct Personality {
-    uint8_t w;
-    uint8_t h;
-    uint8_t* buffer;
-    uint8_t compins;
-    uint8_t contrast_extvcc;
-    uint8_t contrast;
-  };
-
   struct Connection {
     class BasicOutputPin {
     public:
@@ -170,7 +161,14 @@ public:
     Pin sid, sclk, dc, rst, cs;
     boolean hwSPI;
   };
-  Adafruit_SSD1306_Core(Personality p, Connection conn);
+
+  struct Personality {
+    uint8_t compins;
+    uint8_t contrast_extvcc;
+    uint8_t contrast;
+  };
+
+  Adafruit_SSD1306_Core(uint8_t w, uint8_t h, uint8_t* buffer, Personality p, Connection conn);
 
   void startscrollright(uint8_t start, uint8_t stop);
   void startscrollleft(uint8_t start, uint8_t stop);
@@ -191,14 +189,17 @@ public:
 
   void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) override;
   void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) override;
+  void loadSplash(const uint8_t* splash);
+  uint16_t bufByteSize() { return WIDTH * HEIGHT / 8; }
+
+protected:
 
 private:
   void fastSPIwrite(uint8_t c);
   inline void drawFastVLineInternal(int16_t x, int16_t y, int16_t h, uint16_t color) __attribute__((always_inline));
   inline void drawFastHLineInternal(int16_t x, int16_t y, int16_t w, uint16_t color) __attribute__((always_inline));
 
-  uint16_t bufsize() { return _personality.w * _personality.h / 8; }
-
+  uint8_t* _buffer;
   Personality _personality;
   Connection _conn;
   int8_t _i2caddr;
@@ -207,19 +208,29 @@ private:
 
 template <typename D>
 class Adafruit_SSD1306_Basic : public Adafruit_SSD1306_Core {
+  D& asD() { return static_cast<D&>(*this); }
+
+  Adafruit_SSD1306_Basic(Connection conn)
+    : Adafruit_SSD1306_Core(D::w, D::h, asD().buffer, asD().personality(), conn) {
+    loadSplash(D::splash);
+  }
+
 public:
   // software SPI
   Adafruit_SSD1306_Basic(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(D::personality(), Connection{sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin}) {}
+    : Adafruit_SSD1306_Basic(Connection{sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin}) { }
+
   // hardware SPI - we indicate DataCommand, ChipSelect, Reset
   Adafruit_SSD1306_Basic(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(D::personality(), Connection{dc_pin, rst_pin, cs_pin}) {}
+    : Adafruit_SSD1306_Basic(Connection{dc_pin, rst_pin, cs_pin}) { }
+
   // I2C - we only indicate the reset pin!
   explicit Adafruit_SSD1306_Basic(int8_t rst_pin)
-    : Adafruit_SSD1306_Core(D::personality(), Connection{rst_pin}) {}
+    : Adafruit_SSD1306_Basic(Connection{rst_pin}) { }
+
   // I2C without reset
   Adafruit_SSD1306_Basic()
-    : Adafruit_SSD1306_Core(D::personality(), Connection{}) {}
+    : Adafruit_SSD1306_Basic(Connection{}) { }
 };
 
 class Adafruit_SSD1306_96x16
@@ -227,10 +238,11 @@ class Adafruit_SSD1306_96x16
   using Base = Adafruit_SSD1306_Basic<Adafruit_SSD1306_96x16>;
 public:
   using Base::Base;
-  static uint8_t* const buffer;
-  static Personality personality() {
-    return {96, 16, buffer, 0x02 /*ada 0x12*/, 0x10, 0xAF};
-  }
+  static const uint8_t w = 96;
+  static const uint8_t h = 16;
+  static const uint8_t PROGMEM splash[w * h / 8];
+  uint8_t buffer[w * h / 8];
+  static Personality personality() { return {0x02 /*ada 0x12*/, 0x10, 0xAF}; }
 };
 
 class Adafruit_SSD1306_128x32
@@ -238,10 +250,11 @@ class Adafruit_SSD1306_128x32
   using Base = Adafruit_SSD1306_Basic<Adafruit_SSD1306_128x32>;
 public:
   using Base::Base;
-  static uint8_t* const buffer;
-  static Personality personality() {
-    return {128, 32, buffer, 0x02, 0x8F, 0x8F};
-  }
+  static const uint8_t w = 128;
+  static const uint8_t h = 32;
+  static const uint8_t PROGMEM splash[w * h / 8];
+  uint8_t buffer[w * h / 8];
+  static Personality personality() { return {0x02, 0x8F, 0x8F}; }
 };
 
 class Adafruit_SSD1306_128x64
@@ -249,10 +262,11 @@ class Adafruit_SSD1306_128x64
   using Base = Adafruit_SSD1306_Basic<Adafruit_SSD1306_128x64>;
 public:
   using Base::Base;
-  static uint8_t* const buffer;
-  static Personality personality() {
-    return {128, 64, buffer, 0x12, 0x9F, 0xCF};
-  }
+  static const uint8_t w = 128;
+  static const uint8_t h = 64;
+  static const uint8_t PROGMEM splash[w * h / 8];
+  uint8_t buffer[w * h / 8];
+  static Personality personality() { return {0x12, 0x9F, 0xCF}; }
 };
 
 // The default device, for backward compatibility, is the 128x32 device.

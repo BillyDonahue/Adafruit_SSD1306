@@ -73,7 +73,7 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   }
 
   // x is which column
-  uint8_t& byte = _personality.buffer[x + (y / 8) * WIDTH];
+  uint8_t& byte = _buffer[x + (y / 8) * WIDTH];
   uint8_t mask = 1 << (y & 7);
   switch (color) {
     case WHITE:   byte |=  mask; break;
@@ -82,8 +82,9 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   }
 }
 
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, Connection conn)
-  : Adafruit_GFX(p.w, p.h), _personality(p), _conn(conn) {}
+Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(uint8_t w, uint8_t h, uint8_t* buffer, Personality p, Connection conn)
+  : Adafruit_GFX(w, h), _buffer(buffer), _personality(p), _conn(conn) {
+}
 
 void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset) {
   _vccstate = vccstate;
@@ -292,20 +293,19 @@ void Adafruit_SSD1306_Core::display(void) {
     _conn.cs = 1;
     _conn.dc = 1;
     _conn.cs = 0;
-    for (uint16_t i = 0, n = bufsize(); i < n; i++) {
-      fastSPIwrite(_personality.buffer[i]);
+    for (uint16_t i = 0, n = bufByteSize(); i < n; i++) {
+      fastSPIwrite(_buffer[i]);
     }
     _conn.cs = 1;
   } else {
-    FastI2CGuard turbo;
-
     // I2C
-    for (uint16_t i = 0, n = bufsize(); i < n; i++) {
+    FastI2CGuard turbo_i2c_guard;
+    for (uint16_t i = 0, n = bufByteSize(); i < n; i++) {
       // send a bunch of data in one xmission
       Wire.beginTransmission(_i2caddr);
       WIRE_WRITE(0x40);
-      for (uint8_t x=0; x<16; x++) {
-        WIRE_WRITE(_personality.buffer[i]);
+      for (uint8_t x = 0; x < 16; x++) {
+        WIRE_WRITE(_buffer[i]);
         i++;
       }
       i--;
@@ -314,9 +314,16 @@ void Adafruit_SSD1306_Core::display(void) {
   }
 }
 
+void Adafruit_SSD1306_Core::loadSplash(const uint8_t* splash) {
+  uint8_t* bp = _buffer;
+  for (uint16_t i = bufByteSize(); i--; ) {
+    *bp++ = pgm_read_byte(splash++);
+  }
+}
+
 // clear everything
 void Adafruit_SSD1306_Core::clearDisplay(void) {
-  memset(_personality.buffer, 0, bufsize());
+  memset(_buffer, 0, bufByteSize());
 }
 
 
@@ -385,7 +392,7 @@ void Adafruit_SSD1306_Core::drawFastHLineInternal(int16_t x, int16_t y, int16_t 
   if (w <= 0) { return; }
 
   // set up the pointer for movement through the buffer
-  register uint8_t *pBuf = _personality.buffer + (y / 8) * WIDTH + x;
+  register uint8_t *pBuf = _buffer + (y / 8) * WIDTH + x;
   register uint8_t mask = 1 << (y&7);
 
   switch (color) {
@@ -467,7 +474,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t y, int16_t 
   register uint8_t h_reg = h;
 
   // set up the pointer for fast movement through the buffer
-  register uint8_t *pBuf = _personality.buffer;
+  register uint8_t *pBuf = _buffer;
   // adjust the buffer pointer for the current row
   pBuf += (y_reg / 8) * WIDTH;
   // and offset x columns in
