@@ -184,9 +184,6 @@ public:
     Connection(int8_t dc, int8_t rst, int8_t cs);
     explicit Connection(int8_t rst);
     Connection();
-    ~Connection() {
-      delete _hw;
-    }
 
     void begin(uint8_t i2caddr);
     void fastSPIwrite(uint8_t d);
@@ -195,14 +192,14 @@ public:
 
     class HwIface {
     public:
-      virtual ~HwIface() = default;
+      virtual ~HwIface(){}
       virtual void begin(uint8_t i2caddr) = 0;
       virtual void writeBuffer(const uint8_t *buf, uint16_t n) = 0;
       virtual void command(uint8_t) = 0;
     };
     class I2c : public HwIface {
     public:
-      I2c() = default;
+      I2c(){}
       void begin(uint8_t i2caddr) override;
       void writeBuffer(const uint8_t *buf, uint16_t n) override;
       void command(uint8_t) override;
