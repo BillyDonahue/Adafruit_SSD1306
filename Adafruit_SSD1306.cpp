@@ -59,6 +59,9 @@ Adafruit_SSD1306_Core::Connection::Connection(int8_t rst)
   : rst(rst), _hw(new I2c()) {}
 Adafruit_SSD1306_Core::Connection::Connection()
   : _hw(new I2c()) {}
+Adafruit_SSD1306_Core::Connection::~Connection() {
+  delete _hw;
+}
 
 // the most basic function, set a single pixel
 void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
