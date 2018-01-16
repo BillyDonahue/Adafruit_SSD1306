@@ -20,10 +20,17 @@ All text above, and the splash screen must be included in any redistribution
 
 #if ARDUINO >= 100
  #include "Arduino.h"
- #define WIRE_WRITE Wire.write
 #else
  #include "WProgram.h"
-  #define WIRE_WRITE Wire.send
+#endif
+
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+
+#if ARDUINO >= 100
+#define WIRE_WRITE Wire.write
+#else
+#define WIRE_WRITE Wire.send
 #endif
 
 #if defined(__SAM3X8E__)
@@ -44,9 +51,6 @@ All text above, and the splash screen must be included in any redistribution
   typedef volatile uint32_t PortReg;
   typedef uint32_t PortMask;
 #endif
-
-#include <SPI.h>
-#include <Adafruit_GFX.h>
 
 #define BLACK 0
 #define WHITE 1
@@ -102,6 +106,22 @@ All text above, and the splash screen must be included in any redistribution
 #define SSD1306_VERTICAL_AND_RIGHT_HORIZONTAL_SCROLL 0x29
 #define SSD1306_VERTICAL_AND_LEFT_HORIZONTAL_SCROLL 0x2A
 
+namespace Adafruit_SSD1306_helpers {
+
+template <size_t R>                         constexpr size_t Cmax() { return R; }
+template <size_t R, size_t N0, size_t...Ns> constexpr size_t Cmax() { return Cmax<((R>N0)?R:N0), Ns...>(); }
+
+template <typename...Ts>
+constexpr size_t maxAlign() {
+  return Cmax<alignof(Ts)...>();
+}
+template <typename...Ts>
+constexpr size_t maxSize() {
+  return Cmax<sizeof(Ts)...>();
+}
+
+}  // namespace Adafruit_SSD1306_helpers
+
 class Adafruit_SSD1306_Core : public Adafruit_GFX {
 public:
   struct Personality {
@@ -113,7 +133,8 @@ public:
     uint8_t contrast;
   };
 
-  struct Connection {
+  class Connection {
+  public:
     class BasicOutputPin {
     public:
       BasicOutputPin() : _p(-1) {}
@@ -159,16 +180,54 @@ public:
     using Pin = BasicOutputPin;
 #endif
 
-    Connection(int8_t sid, int8_t sclk, int8_t dc, int8_t rst, int8_t cs)
-      : sid(sid), sclk(sclk), dc(dc), rst(rst), cs(cs), hwSPI(false) {}
-    Connection(int8_t dc, int8_t rst, int8_t cs)
-      : dc(dc), rst(rst), cs(cs), hwSPI(true) {}
-    Connection(int8_t rst)
-      : rst(rst) {}
-    Connection() {}
+    Connection(int8_t sid, int8_t sclk, int8_t dc, int8_t rst, int8_t cs);
+    Connection(int8_t dc, int8_t rst, int8_t cs);
+    explicit Connection(int8_t rst);
+    Connection();
 
-    Pin sid, sclk, dc, rst, cs;
-    boolean hwSPI;
+    void begin(uint8_t i2caddr);
+    void fastSPIwrite(uint8_t d);
+    void writeBuffer(const uint8_t *buf, uint16_t n);
+    void command(uint8_t);
+
+    class HwIface {
+    public:
+      virtual ~HwIface();
+      virtual void begin(uint8_t i2caddr) = 0;
+      virtual void fastSPIwrite(uint8_t d) = 0;
+      virtual void writeBuffer(const uint8_t *buf, uint16_t n) = 0;
+      virtual void command(uint8_t) = 0;
+    };
+    class I2c : public HwIface {
+    public:
+      I2c(){}
+      void begin(uint8_t i2caddr) override;
+      void fastSPIwrite(uint8_t d) override;
+      void writeBuffer(const uint8_t *buf, uint16_t n) override;
+      void command(uint8_t) override;
+      uint8_t _i2caddr;
+    };
+    class Spi : public HwIface {
+    public:
+      Spi(int8_t sid, int8_t sclk, int8_t dc, int8_t cs)
+        : sid(sid), sclk(sclk), dc(dc), cs(cs), hwSPI(false) {}
+      Spi(int8_t dc, int8_t cs)
+        : dc(dc), cs(cs), hwSPI(true) {}
+      void begin(uint8_t i2caddr) override;
+      void fastSPIwrite(uint8_t d) override;
+      void writeBuffer(const uint8_t *buf, uint16_t n) override;
+      void command(uint8_t) override;
+      Pin sid, sclk, dc, cs;
+      boolean hwSPI;
+    };
+
+    Pin rst;
+    bool _isSpi;
+    HwIface* _hw;
+
+    static constexpr size_t _hw_size = Adafruit_SSD1306_helpers::maxSize<I2c,Spi>();
+    static constexpr size_t _hw_align = Adafruit_SSD1306_helpers::maxAlign<I2c,Spi>();
+    alignas(_hw_align) char _hw_storage[_hw_size];
   };
   Adafruit_SSD1306_Core(Personality p, Connection conn);
 
@@ -193,7 +252,6 @@ public:
   void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) override;
 
 private:
-  void fastSPIwrite(uint8_t c);
   inline void drawFastVLineInternal(int16_t x, int16_t y, int16_t h, uint16_t color) __attribute__((always_inline));
   inline void drawFastHLineInternal(int16_t x, int16_t y, int16_t w, uint16_t color) __attribute__((always_inline));
 
@@ -201,25 +259,27 @@ private:
 
   Personality _personality;
   Connection _conn;
-  int8_t _i2caddr;
   int8_t _vccstate;
 };
 
 template <typename D>
 class Adafruit_SSD1306_Basic : public Adafruit_SSD1306_Core {
+private:
+  explicit Adafruit_SSD1306_Basic(Connection conn)
+    : Adafruit_SSD1306_Core(D::personality(), conn) {}
 public:
   // software SPI
   Adafruit_SSD1306_Basic(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(D::personality(), Connection{sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin}) {}
+    : Adafruit_SSD1306_Basic(Connection{sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin}) {}
   // hardware SPI - we indicate DataCommand, ChipSelect, Reset
   Adafruit_SSD1306_Basic(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(D::personality(), Connection{dc_pin, rst_pin, cs_pin}) {}
+    : Adafruit_SSD1306_Basic(Connection{dc_pin, rst_pin, cs_pin}) {}
   // I2C - we only indicate the reset pin!
   explicit Adafruit_SSD1306_Basic(int8_t rst_pin)
-    : Adafruit_SSD1306_Core(D::personality(), Connection{rst_pin}) {}
+    : Adafruit_SSD1306_Basic(Connection{rst_pin}) {}
   // I2C without reset
   Adafruit_SSD1306_Basic()
-    : Adafruit_SSD1306_Core(D::personality(), Connection{}) {}
+    : Adafruit_SSD1306_Basic(Connection{}) {}
 };
 
 class Adafruit_SSD1306_96x16

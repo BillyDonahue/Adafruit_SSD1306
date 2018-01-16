@@ -51,6 +51,15 @@ struct FastI2CGuard {
 };
 }  // namespace
 
+Adafruit_SSD1306_Core::Connection::Connection(int8_t sid, int8_t sclk, int8_t dc, int8_t rst, int8_t cs)
+  : rst(rst), _hw(new Spi(sid, sclk, dc, cs)) {}
+Adafruit_SSD1306_Core::Connection::Connection(int8_t dc, int8_t rst, int8_t cs)
+  : rst(rst), _hw(new Spi(dc, cs)) {}
+Adafruit_SSD1306_Core::Connection::Connection(int8_t rst)
+  : rst(rst), _hw(new I2c()) {}
+Adafruit_SSD1306_Core::Connection::Connection()
+  : _hw(new I2c()) {}
+
 // the most basic function, set a single pixel
 void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   if ((x < 0) || (x >= width()) || (y < 0) || (y >= height()))
@@ -85,35 +94,42 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
 Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, Connection conn)
   : Adafruit_GFX(p.w, p.h), _personality(p), _conn(conn) {}
 
+void Adafruit_SSD1306_Core::Connection::Spi::begin(uint8_t) override {
+  dc.outputMode();
+  cs.outputMode();
+  if (hwSPI) {
+    SPI.begin();
+#ifdef SPI_HAS_TRANSACTION
+    SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+#else
+    SPI.setClockDivider(4);
+#endif
+  } else {
+    // set pins for software-SPI
+    sid.outputMode();
+    sclk.outputMode();
+  }
+}
+
+void Adafruit_SSD1306_Core::Connection::I2c::begin(uint8_t i2caddr) {
+  _i2caddr = i2caddr;
+  // I2C Init
+  Wire.begin();
+#ifdef __SAM3X8E__
+  // Force 400 kHz I2C, rawr! (Uses pins 20, 21 for SDA, SCL)
+  TWI1->TWI_CWGR = 0;
+  TWI1->TWI_CWGR = ((VARIANT_MCK / (2 * 400000)) - 4) * 0x101;
+#endif
+}
+
+void Adafruit_SSD1306_Core::Connection::begin(uint8_t i2caddr) {
+  _hw->begin(i2caddr);
+}
+
 void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset) {
   _vccstate = vccstate;
-  _i2caddr = i2caddr;
+  _conn.begin(i2caddr);
 
-  // set pin directions
-  if (_conn.sid.connected()) {
-    _conn.dc.outputMode();
-    _conn.cs.outputMode();
-    if (_conn.hwSPI) {
-      SPI.begin();
-#ifdef SPI_HAS_TRANSACTION
-      SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
-#else
-      SPI.setClockDivider(4);
-#endif
-    } else {
-      // set pins for software-SPI
-      _conn.sid.outputMode();
-      _conn.sclk.outputMode();
-    }
-  } else {
-    // I2C Init
-    Wire.begin();
-#ifdef __SAM3X8E__
-    // Force 400 kHz I2C, rawr! (Uses pins 20, 21 for SDA, SCL)
-    TWI1->TWI_CWGR = 0;
-    TWI1->TWI_CWGR = ((VARIANT_MCK / (2 * 400000)) - 4) * 0x101;
-#endif
-  }
   if (reset && _conn.rst.connected()) {
     _conn.rst.outputMode(); // Setup reset pin direction (used by both SPI and I2C)
     _conn.rst = 1;
@@ -172,14 +188,14 @@ void Adafruit_SSD1306_Core::invertDisplay(boolean i) {
   }
 }
 
-void Adafruit_SSD1306_Core::ssd1306_command(uint8_t c) {
-  if (_conn.sid.connected()) {
+void Adafruit_SSD1306_Core::Connection::command(uint8_t c) {
+  if (sid.connected()) {
     // SPI
-    _conn.cs = 1;
-    _conn.dc = 0;
-    _conn.cs = 0;
+    cs = 1;
+    dc = 0;
+    cs = 0;
     fastSPIwrite(c);
-    _conn.cs = 1;
+    cs = 1;
   } else {
     // I2C
     uint8_t control = 0x00;   // Co = 0, D/C = 0
@@ -188,6 +204,10 @@ void Adafruit_SSD1306_Core::ssd1306_command(uint8_t c) {
     Wire.write(c);
     Wire.endTransmission();
   }
+}
+
+void Adafruit_SSD1306_Core::ssd1306_command(uint8_t c) {
+  _conn.command(c);
 }
 
 // startscrollright
@@ -278,6 +298,33 @@ void Adafruit_SSD1306_Core::dim(boolean dim) {
   ssd1306_command(contrast);
 }
 
+void Adafruit_SSD1306::Connection::writeBuffer(const uint8_t *buf, uint16_t n) {
+  if (sid.connected()) {
+    // SPI
+    cs = 1;
+    dc = 1;
+    cs = 0;
+    for (uint16_t i = 0; i < n; i++) {
+      fastSPIwrite(buf[i]);
+    }
+    cs = 1;
+  } else {
+    // I2C
+    FastI2CGuard i2cTurbo;
+    for (uint16_t i = 0; i < n; i++) {
+      // send a bunch of data in one xmission
+      Wire.beginTransmission(_i2caddr);
+      WIRE_WRITE(0x40);
+      for (uint8_t x = 0; x < 16; x++) {
+        WIRE_WRITE(buf[i]);
+        i++;
+      }
+      i--;
+      Wire.endTransmission();
+    }
+  }
+}
+
 void Adafruit_SSD1306_Core::display(void) {
   ssd1306_command(SSD1306_COLUMNADDR);
   ssd1306_command(0);   // Column start address (0 = reset)
@@ -287,31 +334,7 @@ void Adafruit_SSD1306_Core::display(void) {
   ssd1306_command(0); // Page start address (0 = reset)
   ssd1306_command((HEIGHT>>3) - 1); // Page end address
 
-  if (_conn.sid.connected()) {
-    // SPI
-    _conn.cs = 1;
-    _conn.dc = 1;
-    _conn.cs = 0;
-    for (uint16_t i = 0, n = bufsize(); i < n; i++) {
-      fastSPIwrite(_personality.buffer[i]);
-    }
-    _conn.cs = 1;
-  } else {
-    FastI2CGuard turbo;
-
-    // I2C
-    for (uint16_t i = 0, n = bufsize(); i < n; i++) {
-      // send a bunch of data in one xmission
-      Wire.beginTransmission(_i2caddr);
-      WIRE_WRITE(0x40);
-      for (uint8_t x=0; x<16; x++) {
-        WIRE_WRITE(_personality.buffer[i]);
-        i++;
-      }
-      i--;
-      Wire.endTransmission();
-    }
-  }
+  _conn.writeBuffer(_personality.buffer, bufsize());
 }
 
 // clear everything
@@ -319,15 +342,14 @@ void Adafruit_SSD1306_Core::clearDisplay(void) {
   memset(_personality.buffer, 0, bufsize());
 }
 
-
-inline void Adafruit_SSD1306_Core::fastSPIwrite(uint8_t d) {
-  if (_conn.hwSPI) {
+inline void Adafruit_SSD1306_Core::Connection::fastSPIwrite(uint8_t d) {
+  if (hwSPI) {
     (void)SPI.transfer(d);
   } else {
     for (uint8_t bit = 0x80; bit; bit >>= 1) {
-      _conn.sclk = 0;
-      _conn.sid = d & bit;
-      _conn.sclk = 1;
+      sclk = 0;
+      sid = d & bit;
+      sclk = 1;
     }
   }
 }
