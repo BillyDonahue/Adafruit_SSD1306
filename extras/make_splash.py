@@ -43,6 +43,22 @@ def arrayDefinition(out, w, h):
       decl += '};\n'
   return decl
 
+def bitmapDefinition(im, w, h):
+  decl = str()
+  for j in range(im.height):
+    decl += "//  "
+    for i in range(im.width):
+      if i & 7 == 0:
+        decl += "B"
+      if im.getpixel((i, j)) != 0:
+        decl += "1"
+      else:
+        decl += "0"
+      if i & 7 == 7:
+        decl += ","
+    decl += "\n"
+  return decl
+
 def usage():
   sys.stderr.write('python make_splash.py -b image.bmp [-o output_prefix]\n')
   sys.exit(2)
@@ -50,9 +66,10 @@ def usage():
 def main():
   bmp_file = None
   out_prefix = None
+  verbose = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], 'b:o:')
+    opts, args = getopt.getopt(sys.argv[1:], 'b:o:v')
   except getopt.GetoptError as err:
     sys.stderr.write(str(err)+"\n")
     usage()
@@ -61,6 +78,8 @@ def main():
       bmp_file = a
     if o == '-o':
       out_prefix = a
+    if o == '-v':
+      verbose = True
 
   if bmp_file == None:
     usage()
@@ -75,6 +94,8 @@ def main():
   for w, h in [(96, 16), (128, 32), (128, 64)]:
     im = gray.resize((w, h), resample=Image.BILINEAR)
     im = im.point(apply_thresh)
+    if verbose:
+      sys.stderr.write(bitmapDefinition(im, w, h))
     out = verticalBytes(im)
     print(arrayDefinition(out, w, h))
     if out_prefix:
