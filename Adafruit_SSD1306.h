@@ -168,7 +168,7 @@ public:
     uint8_t contrast;
   };
 
-  Adafruit_SSD1306_Core(uint8_t w, uint8_t h, uint8_t* buffer, Personality p, Connection conn);
+  Adafruit_SSD1306_Core(uint8_t w, uint8_t h, uint8_t* buffer, Connection conn);
 
   void startscrollright(uint8_t start, uint8_t stop);
   void startscrollleft(uint8_t start, uint8_t stop);
@@ -193,6 +193,7 @@ public:
   uint16_t bufByteSize() { return WIDTH * HEIGHT / 8; }
 
 protected:
+  virtual Personality personality() const = 0;
 
 private:
   void fastSPIwrite(uint8_t c);
@@ -200,7 +201,6 @@ private:
   inline void drawFastHLineInternal(int16_t x, int16_t y, int16_t w, uint16_t color) __attribute__((always_inline));
 
   uint8_t* _buffer;
-  Personality _personality;
   Connection _conn;
   int8_t _i2caddr;
   int8_t _vccstate;
@@ -211,7 +211,7 @@ class Adafruit_SSD1306_Basic : public Adafruit_SSD1306_Core {
   D& asD() { return static_cast<D&>(*this); }
 
   Adafruit_SSD1306_Basic(Connection conn)
-    : Adafruit_SSD1306_Core(D::w, D::h, asD().buffer, asD().personality(), conn) {
+    : Adafruit_SSD1306_Core(D::w, D::h, asD().buffer, conn) {
     loadSplash(D::splash);
   }
 
@@ -242,7 +242,7 @@ public:
   static const uint8_t h = 16;
   static const uint8_t PROGMEM splash[w * h / 8];
   uint8_t buffer[w * h / 8];
-  static Personality personality() { return {0x02 /*ada 0x12*/, 0x10, 0xAF}; }
+  Personality personality() const override { return {0x02 /*ada 0x12*/, 0x10, 0xAF}; }
 };
 
 class Adafruit_SSD1306_128x32
@@ -254,7 +254,7 @@ public:
   static const uint8_t h = 32;
   static const uint8_t PROGMEM splash[w * h / 8];
   uint8_t buffer[w * h / 8];
-  static Personality personality() { return {0x02, 0x8F, 0x8F}; }
+  Personality personality() const override { return {0x02, 0x8F, 0x8F}; }
 };
 
 class Adafruit_SSD1306_128x64
@@ -266,7 +266,7 @@ public:
   static const uint8_t h = 64;
   static const uint8_t PROGMEM splash[w * h / 8];
   uint8_t buffer[w * h / 8];
-  static Personality personality() { return {0x12, 0x9F, 0xCF}; }
+  Personality personality() const override { return {0x12, 0x9F, 0xCF}; }
 };
 
 // The default device, for backward compatibility, is the 128x32 device.

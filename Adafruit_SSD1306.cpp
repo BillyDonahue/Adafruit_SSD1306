@@ -82,8 +82,8 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   }
 }
 
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(uint8_t w, uint8_t h, uint8_t* buffer, Personality p, Connection conn)
-  : Adafruit_GFX(w, h), _buffer(buffer), _personality(p), _conn(conn) {
+Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(uint8_t w, uint8_t h, uint8_t* buffer, Connection conn)
+  : Adafruit_GFX(w, h), _buffer(buffer), _conn(conn) {
 }
 
 void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset) {
@@ -126,8 +126,9 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   }
 
   const bool extvcc = (_vccstate == SSD1306_EXTERNALVCC);
-  uint8_t compins = _personality.compins;
-  uint8_t contrast = extvcc ? _personality.contrast_extvcc : _personality.contrast;
+  Personality p = personality();
+  uint8_t compins = p.compins;
+  uint8_t contrast = extvcc ? p.contrast_extvcc : p.contrast;
 
   // Init sequence
   ssd1306_command(SSD1306_DISPLAYOFF);                    // 0xAE
