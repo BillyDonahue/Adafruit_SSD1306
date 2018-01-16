@@ -192,9 +192,8 @@ public:
 
     class HwIface {
     public:
-      virtual ~HwIface();
+      virtual ~HwIface(){}
       virtual void begin(uint8_t i2caddr) = 0;
-      virtual void fastSPIwrite(uint8_t d) = 0;
       virtual void writeBuffer(const uint8_t *buf, uint16_t n) = 0;
       virtual void command(uint8_t) = 0;
     };
@@ -202,7 +201,6 @@ public:
     public:
       I2c(){}
       void begin(uint8_t i2caddr) override;
-      void fastSPIwrite(uint8_t d) override;
       void writeBuffer(const uint8_t *buf, uint16_t n) override;
       void command(uint8_t) override;
       uint8_t _i2caddr;
@@ -214,9 +212,10 @@ public:
       Spi(int8_t dc, int8_t cs)
         : dc(dc), cs(cs), hwSPI(true) {}
       void begin(uint8_t i2caddr) override;
-      void fastSPIwrite(uint8_t d) override;
       void writeBuffer(const uint8_t *buf, uint16_t n) override;
       void command(uint8_t) override;
+    private:
+      void fastSPIwrite(uint8_t d);
       Pin sid, sclk, dc, cs;
       boolean hwSPI;
     };

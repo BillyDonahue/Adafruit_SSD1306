@@ -94,7 +94,7 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
 Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(Personality p, Connection conn)
   : Adafruit_GFX(p.w, p.h), _personality(p), _conn(conn) {}
 
-void Adafruit_SSD1306_Core::Connection::Spi::begin(uint8_t) override {
+void Adafruit_SSD1306_Core::Connection::Spi::begin(uint8_t) {
   dc.outputMode();
   cs.outputMode();
   if (hwSPI) {
@@ -188,22 +188,25 @@ void Adafruit_SSD1306_Core::invertDisplay(boolean i) {
   }
 }
 
+void Adafruit_SSD1306_Core::Connection::Spi::command(uint8_t c) {
+  // SPI
+  cs = 1;
+  dc = 0;
+  cs = 0;
+  fastSPIwrite(c);
+  cs = 1;
+}
+
+void Adafruit_SSD1306_Core::Connection::I2c::command(uint8_t c) {
+  uint8_t control = 0x00;   // Co = 0, D/C = 0
+  Wire.beginTransmission(_i2caddr);
+  Wire.write(control);
+  Wire.write(c);
+  Wire.endTransmission();
+}
+
 void Adafruit_SSD1306_Core::Connection::command(uint8_t c) {
-  if (sid.connected()) {
-    // SPI
-    cs = 1;
-    dc = 0;
-    cs = 0;
-    fastSPIwrite(c);
-    cs = 1;
-  } else {
-    // I2C
-    uint8_t control = 0x00;   // Co = 0, D/C = 0
-    Wire.beginTransmission(_i2caddr);
-    Wire.write(control);
-    Wire.write(c);
-    Wire.endTransmission();
-  }
+  _hw->command(c);
 }
 
 void Adafruit_SSD1306_Core::ssd1306_command(uint8_t c) {
@@ -299,29 +302,30 @@ void Adafruit_SSD1306_Core::dim(boolean dim) {
 }
 
 void Adafruit_SSD1306::Connection::writeBuffer(const uint8_t *buf, uint16_t n) {
-  if (sid.connected()) {
-    // SPI
-    cs = 1;
-    dc = 1;
-    cs = 0;
-    for (uint16_t i = 0; i < n; i++) {
-      fastSPIwrite(buf[i]);
+  _hw->writeBuffer(buf, n);
+}
+
+void Adafruit_SSD1306::Connection::Spi::writeBuffer(const uint8_t *buf, uint16_t n) {
+  cs = 1;
+  dc = 1;
+  cs = 0;
+  for (uint16_t i = 0; i < n; i++) {
+    fastSPIwrite(buf[i]);
+  }
+  cs = 1;
+}
+void Adafruit_SSD1306::Connection::I2c::writeBuffer(const uint8_t *buf, uint16_t n) {
+  FastI2CGuard i2cTurbo;
+  for (uint16_t i = 0; i < n; i++) {
+    // send a bunch of data in one xmission
+    Wire.beginTransmission(_i2caddr);
+    WIRE_WRITE(0x40);
+    for (uint8_t x = 0; x < 16; x++) {
+      WIRE_WRITE(buf[i]);
+      i++;
     }
-    cs = 1;
-  } else {
-    // I2C
-    FastI2CGuard i2cTurbo;
-    for (uint16_t i = 0; i < n; i++) {
-      // send a bunch of data in one xmission
-      Wire.beginTransmission(_i2caddr);
-      WIRE_WRITE(0x40);
-      for (uint8_t x = 0; x < 16; x++) {
-        WIRE_WRITE(buf[i]);
-        i++;
-      }
-      i--;
-      Wire.endTransmission();
-    }
+    i--;
+    Wire.endTransmission();
   }
 }
 
@@ -342,7 +346,7 @@ void Adafruit_SSD1306_Core::clearDisplay(void) {
   memset(_personality.buffer, 0, bufsize());
 }
 
-inline void Adafruit_SSD1306_Core::Connection::fastSPIwrite(uint8_t d) {
+inline void Adafruit_SSD1306_Core::Connection::Spi::fastSPIwrite(uint8_t d) {
   if (hwSPI) {
     (void)SPI.transfer(d);
   } else {
