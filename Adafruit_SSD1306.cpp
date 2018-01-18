@@ -149,8 +149,6 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   ssd1306_command(SSD1306_COMSCANDEC);
 
   if (WIDTH == 128 && HEIGHT == 32) {
-    com_pins = 0x2;
-    contrast = 0x8F;
     ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
     ssd1306_command(0x2);
     ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
