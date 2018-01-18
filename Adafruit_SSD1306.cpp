@@ -296,7 +296,7 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
 }
 
 
-void Adafruit_SSD1306_Core::invertDisplay(uint8_t i) {
+void Adafruit_SSD1306_Core::invertDisplay(boolean i) {
   if (i) {
     ssd1306_command(SSD1306_INVERTDISPLAY);
   } else {

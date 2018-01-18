@@ -149,7 +149,6 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
   void ssd1306_command(uint8_t c);
 
   void clearDisplay(void);
-  void invertDisplay(uint8_t i);
   void display();
 
   void startscrollright(uint8_t start, uint8_t stop);
@@ -161,10 +160,11 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
 
   void dim(boolean dim);
 
-  void drawPixel(int16_t x, int16_t y, uint16_t color);
-
-  virtual void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  virtual void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
+  // Adafruit_GFX virtuals
+  void invertDisplay(boolean i) override;
+  void drawPixel(int16_t x, int16_t y, uint16_t color) override;
+  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) override;
+  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) override;
 
  private:
   int8_t _i2caddr, _vccstate, sid, sclk, dc, rst, cs;
