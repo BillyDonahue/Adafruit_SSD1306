@@ -180,12 +180,13 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
   }
 
   // x is which column
-    switch (color)
-    {
-      case WHITE:   buffer[x+ (y/8)*WIDTH] |=  (1 << (y&7)); break;
-      case BLACK:   buffer[x+ (y/8)*WIDTH] &= ~(1 << (y&7)); break;
-      case INVERSE: buffer[x+ (y/8)*WIDTH] ^=  (1 << (y&7)); break;
-    }
+  uint8_t& byte = buffer[x+ (y/8)*WIDTH];
+  uint8_t mask = 1 << (y & 7);
+  switch (color) {
+    case WHITE:   byte |=  mask; break;
+    case BLACK:   byte &= ~mask; break;
+    case INVERSE: byte ^=  mask; break;
+  }
 
 }
 
@@ -252,7 +253,7 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
 
   int8_t compins_alt = 0;  // sequential / alternative#
   bool extvcc = (vccstate == SSD1306_EXTERNALVCC);
-  int8_t contrast;
+  int8_t contrast = 0;
   if (WIDTH == 128 && HEIGHT == 32) {
     contrast = 0x8F;
   } else if (WIDTH == 128 && HEIGHT == 64) {
@@ -273,13 +274,13 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   ssd1306_command(0x0);                                   // no offset
   ssd1306_command(SSD1306_SETSTARTLINE | 0x0);            // line #0
   ssd1306_command(SSD1306_CHARGEPUMP);                    // 0x8D
-  ssd1306_command(extvcc ? 0x10 : 0x14);
+  ssd1306_command(0x10 | ((!extvcc) << 2));
   ssd1306_command(SSD1306_MEMORYMODE);                    // 0x20
   ssd1306_command(0x00);                                  // 0x0 act like ks0108
   ssd1306_command(SSD1306_SEGREMAP | 0x1);
   ssd1306_command(SSD1306_COMSCANDEC);
   ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
-  ssd1306_command((compins_alt << 4) | 0x2);
+  ssd1306_command(0x02 | (compins_alt << 4));
   ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
   ssd1306_command(contrast);
   ssd1306_command(SSD1306_SETPRECHARGE);                  // 0xd9
