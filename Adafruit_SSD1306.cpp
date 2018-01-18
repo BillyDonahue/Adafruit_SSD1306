@@ -68,31 +68,6 @@ void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
 
 }
 
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(int8_t SID, int8_t SCLK, int8_t DC, int8_t RST, int8_t CS) : Adafruit_GFX(SSD1306_LCDWIDTH, SSD1306_LCDHEIGHT) {
-  cs = CS;
-  rst = RST;
-  dc = DC;
-  sclk = SCLK;
-  sid = SID;
-  hwSPI = false;
-}
-
-// constructor for hardware SPI - we indicate DataCommand, ChipSelect, Reset
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(int8_t DC, int8_t RST, int8_t CS) : Adafruit_GFX(SSD1306_LCDWIDTH, SSD1306_LCDHEIGHT) {
-  dc = DC;
-  rst = RST;
-  cs = CS;
-  hwSPI = true;
-}
-
-// initializer for I2C - we only indicate the reset pin!
-Adafruit_SSD1306_Core::Adafruit_SSD1306_Core(int8_t reset) :
-Adafruit_GFX(SSD1306_LCDWIDTH, SSD1306_LCDHEIGHT) {
-  sclk = dc = cs = sid = -1;
-  rst = reset;
-}
-
-
 void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset) {
   _vccstate = vccstate;
   _i2caddr = i2caddr;
@@ -158,7 +133,7 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   ssd1306_command(0x80);                                  // the suggested ratio 0x80
 
   ssd1306_command(SSD1306_SETMULTIPLEX);                  // 0xA8
-  ssd1306_command(SSD1306_LCDHEIGHT - 1);
+  ssd1306_command(HEIGHT - 1);
 
   ssd1306_command(SSD1306_SETDISPLAYOFFSET);              // 0xD3
   ssd1306_command(0x0);                                   // no offset
@@ -173,31 +148,30 @@ void Adafruit_SSD1306_Core::begin(uint8_t vccstate, uint8_t i2caddr, bool reset)
   ssd1306_command(SSD1306_SEGREMAP | 0x1);
   ssd1306_command(SSD1306_COMSCANDEC);
 
- #if defined SSD1306_128_32
-  ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
-  ssd1306_command(0x02);
-  ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
-  ssd1306_command(0x8F);
-
-#elif defined SSD1306_128_64
-  ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
-  ssd1306_command(0x12);
-  ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
-  if (vccstate == SSD1306_EXTERNALVCC)
-    { ssd1306_command(0x9F); }
-  else
-    { ssd1306_command(0xCF); }
-
-#elif defined SSD1306_96_16
-  ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
-  ssd1306_command(0x2);   //ada x12
-  ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
-  if (vccstate == SSD1306_EXTERNALVCC)
-    { ssd1306_command(0x10); }
-  else
-    { ssd1306_command(0xAF); }
-
-#endif
+  if (WIDTH == 128 && HEIGHT == 32) {
+    com_pins = 0x2;
+    contrast = 0x8F;
+    ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
+    ssd1306_command(0x2);
+    ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
+    ssd1306_command(0x8F);
+  } else if (WIDTH == 128 && HEIGHT == 64) {
+    ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
+    ssd1306_command(0x12);
+    ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
+    if (vccstate == SSD1306_EXTERNALVCC)
+      { ssd1306_command(0x9F); }
+    else
+      { ssd1306_command(0xCF); }
+  } else if (WIDTH == 96 && HEIGHT == 16) {
+    ssd1306_command(SSD1306_SETCOMPINS);                    // 0xDA
+    ssd1306_command(0x2);   //ada x12
+    ssd1306_command(SSD1306_SETCONTRAST);                   // 0x81
+    if (vccstate == SSD1306_EXTERNALVCC)
+      { ssd1306_command(0x10); }
+    else
+      { ssd1306_command(0xAF); }
+  }
 
   ssd1306_command(SSD1306_SETPRECHARGE);                  // 0xd9
   if (vccstate == SSD1306_EXTERNALVCC)
@@ -291,7 +265,7 @@ void Adafruit_SSD1306_Core::startscrollleft(uint8_t start, uint8_t stop){
 void Adafruit_SSD1306_Core::startscrolldiagright(uint8_t start, uint8_t stop){
   ssd1306_command(SSD1306_SET_VERTICAL_SCROLL_AREA);
   ssd1306_command(0X00);
-  ssd1306_command(SSD1306_LCDHEIGHT);
+  ssd1306_command(HEIGHT);
   ssd1306_command(SSD1306_VERTICAL_AND_RIGHT_HORIZONTAL_SCROLL);
   ssd1306_command(0X00);
   ssd1306_command(start);
@@ -308,7 +282,7 @@ void Adafruit_SSD1306_Core::startscrolldiagright(uint8_t start, uint8_t stop){
 void Adafruit_SSD1306_Core::startscrolldiagleft(uint8_t start, uint8_t stop){
   ssd1306_command(SSD1306_SET_VERTICAL_SCROLL_AREA);
   ssd1306_command(0X00);
-  ssd1306_command(SSD1306_LCDHEIGHT);
+  ssd1306_command(HEIGHT);
   ssd1306_command(SSD1306_VERTICAL_AND_LEFT_HORIZONTAL_SCROLL);
   ssd1306_command(0X00);
   ssd1306_command(start);
@@ -344,21 +318,15 @@ void Adafruit_SSD1306_Core::dim(boolean dim) {
 }
 
 void Adafruit_SSD1306_Core::display(void) {
+  const uint8_t column_start = 0;
+  const uint8_t page_start = 0;
   ssd1306_command(SSD1306_COLUMNADDR);
-  ssd1306_command(0);   // Column start address (0 = reset)
-  ssd1306_command(SSD1306_LCDWIDTH-1); // Column end address (127 = reset)
+  ssd1306_command(column_start);   // Column start address (0 = reset)
+  ssd1306_command(column_start + WIDTH - 1); // Column end address (127 = reset)
 
   ssd1306_command(SSD1306_PAGEADDR);
-  ssd1306_command(0); // Page start address (0 = reset)
-  #if SSD1306_LCDHEIGHT == 64
-    ssd1306_command(7); // Page end address
-  #endif
-  #if SSD1306_LCDHEIGHT == 32
-    ssd1306_command(3); // Page end address
-  #endif
-  #if SSD1306_LCDHEIGHT == 16
-    ssd1306_command(1); // Page end address
-  #endif
+  ssd1306_command(page_start); // Page start address (0 = reset)
+  ssd1306_command(page_start + HEIGHT / 8 - 1); // Page end address
 
   if (sid != -1)
   {
@@ -373,7 +341,7 @@ void Adafruit_SSD1306_Core::display(void) {
     digitalWrite(cs, LOW);
 #endif
 
-    for (uint16_t i=0; i<(SSD1306_LCDWIDTH*SSD1306_LCDHEIGHT/8); i++) {
+    for (uint16_t i=0; i<(WIDTH*HEIGHT/8); i++) {
       fastSPIwrite(buffer[i]);
     }
 #ifdef HAVE_PORTREG
@@ -385,16 +353,13 @@ void Adafruit_SSD1306_Core::display(void) {
   else
   {
     // save I2C bitrate
-#ifdef TWBR
     uint8_t twbrbackup = TWBR;
     TWBR = 12; // upgrade to 400KHz!
-#endif
-
     //Serial.println(TWBR, DEC);
     //Serial.println(TWSR & 0x3, DEC);
 
     // I2C
-    for (uint16_t i=0; i<(SSD1306_LCDWIDTH*SSD1306_LCDHEIGHT/8); i++) {
+    for (uint16_t i=0; i<(WIDTH*HEIGHT/8); i++) {
       // send a bunch of data in one xmission
       Wire.beginTransmission(_i2caddr);
       WIRE_WRITE(0x40);
@@ -413,7 +378,7 @@ void Adafruit_SSD1306_Core::display(void) {
 
 // clear everything
 void Adafruit_SSD1306_Core::clearDisplay(void) {
-  memset(buffer, 0, (SSD1306_LCDWIDTH*SSD1306_LCDHEIGHT/8));
+  memset(buffer, 0, (WIDTH*HEIGHT/8));
 }
 
 
@@ -493,7 +458,7 @@ void Adafruit_SSD1306_Core::drawFastHLineInternal(int16_t x, int16_t y, int16_t 
   // set up the pointer for  movement through the buffer
   register uint8_t *pBuf = buffer;
   // adjust the buffer pointer for the current row
-  pBuf += ((y/8) * SSD1306_LCDWIDTH);
+  pBuf += ((y/8) * WIDTH);
   // and offset x columns in
   pBuf += x;
 
@@ -572,7 +537,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t __y, int16_
   // set up the pointer for fast movement through the buffer
   register uint8_t *pBuf = buffer;
   // adjust the buffer pointer for the current row
-  pBuf += ((y/8) * SSD1306_LCDWIDTH);
+  pBuf += ((y/8) * WIDTH);
   // and offset x columns in
   pBuf += x;
 
@@ -604,7 +569,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t __y, int16_
 
     h -= mod;
 
-    pBuf += SSD1306_LCDWIDTH;
+    pBuf += WIDTH;
   }
 
 
@@ -615,7 +580,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t __y, int16_
       *pBuf=~(*pBuf);
 
         // adjust the buffer forward 8 rows worth of data
-        pBuf += SSD1306_LCDWIDTH;
+        pBuf += WIDTH;
 
         // adjust h & y (there's got to be a faster way for me to do this, but this should still help a fair bit for now)
         h -= 8;
@@ -630,7 +595,7 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t __y, int16_
       *pBuf = val;
 
         // adjust the buffer forward 8 rows worth of data
-        pBuf += SSD1306_LCDWIDTH;
+        pBuf += WIDTH;
 
         // adjust h & y (there's got to be a faster way for me to do this, but this should still help a fair bit for now)
         h -= 8;

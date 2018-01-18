@@ -117,9 +117,33 @@ All text above, and the splash screen must be included in any redistribution
 
 class Adafruit_SSD1306_Core : public Adafruit_GFX {
  public:
-  Adafruit_SSD1306_Core(int8_t SID, int8_t SCLK, int8_t DC, int8_t RST, int8_t CS);
-  Adafruit_SSD1306_Core(int8_t DC, int8_t RST, int8_t CS);
-  Adafruit_SSD1306_Core(int8_t RST = -1);
+  struct PinConfig {
+    PinConfig(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+      : sid(sid_pin), sclk(sclk_pin), dc(dc_pin), rst(rst_pin), cs(cs_pin), hwSPI(false) {}
+    PinConfig(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+      : sid(-1), sclk(-1), dc(dc_pin), rst(rst_pin), cs(cs_pin), hwSPI(true) {}
+    explicit PinConfig(int8_t rst_pin = -1)
+      : sid(-1), sclk(-1), dc(-1), rst(rst_pin), cs(-1) {}
+
+    int8_t sid, sclk, dc, rst, cs;
+    bool hwSPI;
+  };
+
+  // 'splash' must be in the PROGMEM segment.
+  Adafruit_SSD1306_Core(PinConfig pins, uint8_t w, uint8_t h, uint8_t *buf, const uint8_t* splash)
+    : Adafruit_GFX(w, h),
+      sid(pins.sid),
+      sclk(pins.sclk),
+      dc(pins.dc),
+      rst(pins.rst),
+      cs(pins.cs),
+      hwSPI(pins.hwSPI),
+      buffer(buf) {
+    loadSplash(splash);
+  uint8_t* bp = buffer;
+  for (uint16_t i = WIDTH * HEIGHT / 8; i--; ) {
+    *bp++ = pgm_read_byte(splash++);
+  }
 
   void begin(uint8_t switchvcc = SSD1306_SWITCHCAPVCC, uint8_t i2caddr = SSD1306_I2C_ADDRESS, bool reset=true);
   void ssd1306_command(uint8_t c);
@@ -151,59 +175,66 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
   PortReg *mosiport, *clkport, *csport, *dcport;
   PortMask mosipinmask, clkpinmask, cspinmask, dcpinmask;
 #endif
+  uint8_t* buffer;
 
   inline void drawFastVLineInternal(int16_t x, int16_t y, int16_t h, uint16_t color) __attribute__((always_inline));
   inline void drawFastHLineInternal(int16_t x, int16_t y, int16_t w, uint16_t color) __attribute__((always_inline));
 };
 
 template <typename D>
-class Adafruit_SSD1306_Basic : public Adafruit_SSD1306_Core {
-  D& asD() { return static_cast<D&>(*this); }
+class Adafruit_SSD1306_Customize : public Adafruit_SSD1306_Core {
+ private:
+  Adafruit_SSD1306_Customize(PinConfig pins)
+    : Adafruit_SSD1306_Core(pins, D::w, D::h, buffer, D::splash) { }
 
-  Adafruit_SSD1306_Basic(Pins pins)
-    : Adafruit_SSD1306_Core(D::w, D::h, asD().buffer, conn) {
-    loadSplash(D::splash);
-  }
- 
 public:
   // software SPI
-  Adafruit_SSD1306_Basic(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin) { }
+  Adafruit_SSD1306_Customize(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+    : Adafruit_SSD1306_Customize(PinConfig(sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin)) {}
 
   // hardware SPI - we indicate DataCommand, ChipSelect, Reset
-  Adafruit_SSD1306_Basic(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Core(dc_pin, rst_pin, cs_pin) { }
+  Adafruit_SSD1306_Customize(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+    : Adafruit_SSD1306_Customize(PinConfig(dc_pin, rst_pin, cs_pin)) {}
 
   // I2C - we only indicate the reset pin!
-  explicit Adafruit_SSD1306_Basic(int8_t rst_pin)
-    : Adafruit_SSD1306_Core(rst_pin) { }
+  explicit Adafruit_SSD1306_Customize(int8_t rst_pin)
+    : Adafruit_SSD1306_Customize(PinConfig(rst_pin)) {}
 
-  // I2C without reset
-  Adafruit_SSD1306_Basic()
-    : Adafruit_SSD1306_Core() { }
+  // I2C - without reset
+  Adafruit_SSD1306_Customize()
+    : Adafruit_SSD1306_Customize(PinConfig()) {}
+
+  uint8_t buffer[D::w * D::h / 8];
 };
 
 class Adafruit_SSD1306_96x16
-  : public Adafruit_SSD1306_Core::Adapted<Adafruit_SSD1306_96x16> {
-  using Base = Adafruit_SSD1306_Core::Adapted<Adafruit_SSD1306_96x16>;
+  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16> {
+  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16>;
  public:
+  using Base::Base;
   static const uint8_t w = 96;
   static const uint8_t h = 16;
+  static const uint8_t PROGMEM splash[w*h/8];
+};
+
+class Adafruit_SSD1306_128x32
+  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32> {
+  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32>;
+ public:
   using Base::Base;
+  static const uint8_t w = 128;
+  static const uint8_t h = 32;
+  static const uint8_t PROGMEM splash[w*h/8];
 };
 
-class Adafruit_SSD1306_128x32 : public Adafruit_SSD1306_Core {
+class Adafruit_SSD1306_128x64
+  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64> {
+  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64>;
  public:
-  using Adafruit_SSD1306_Core::Adafruit_SSD1306_Core;
-};
-
-class Adafruit_SSD1306_128x64 : public Adafruit_SSD1306_Core {
- public:
-  using Adafruit_SSD1306_Core::Adafruit_SSD1306_Core;
+  using Base::Base;
   static const uint8_t w = 128;
   static const uint8_t h = 64;
-  static const uint8_t PROGMEM splash[w * h / 8];
-  uint8_t buffer[w * h / 8];
+  static const uint8_t PROGMEM splash[w*h/8];
 };
 
 // The old name for the 128x32 driver.
