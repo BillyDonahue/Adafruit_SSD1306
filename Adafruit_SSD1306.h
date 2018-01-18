@@ -139,10 +139,10 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
       cs(pins.cs),
       hwSPI(pins.hwSPI),
       buffer(buf) {
-    loadSplash(splash);
-  uint8_t* bp = buffer;
-  for (uint16_t i = WIDTH * HEIGHT / 8; i--; ) {
-    *bp++ = pgm_read_byte(splash++);
+    uint8_t* bp = buffer;
+    for (uint16_t i = WIDTH * HEIGHT / 8; i--; ) {
+      *bp++ = pgm_read_byte(splash++);
+    }
   }
 
   void begin(uint8_t switchvcc = SSD1306_SWITCHCAPVCC, uint8_t i2caddr = SSD1306_I2C_ADDRESS, bool reset=true);
@@ -181,11 +181,11 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
   inline void drawFastHLineInternal(int16_t x, int16_t y, int16_t w, uint16_t color) __attribute__((always_inline));
 };
 
-template <typename D>
+template <typename D, uint8_t WParam, uint8_t HParam>
 class Adafruit_SSD1306_Customize : public Adafruit_SSD1306_Core {
  private:
   Adafruit_SSD1306_Customize(PinConfig pins)
-    : Adafruit_SSD1306_Core(pins, D::w, D::h, buffer, D::splash) { }
+    : Adafruit_SSD1306_Core(pins, WParam, HParam, buffer, D::splash) { }
 
 public:
   // software SPI
@@ -204,37 +204,31 @@ public:
   Adafruit_SSD1306_Customize()
     : Adafruit_SSD1306_Customize(PinConfig()) {}
 
-  uint8_t buffer[D::w * D::h / 8];
+  uint8_t buffer[WParam * HParam / 8];
 };
 
 class Adafruit_SSD1306_96x16
-  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16> {
-  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16>;
+  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16,96,16> {
+  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16,96,16>;
  public:
   using Base::Base;
-  static const uint8_t w = 96;
-  static const uint8_t h = 16;
-  static const uint8_t PROGMEM splash[w*h/8];
+  static const uint8_t* const splash;
 };
 
 class Adafruit_SSD1306_128x32
-  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32> {
-  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32>;
+  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32,128,32> {
+  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32,128,32>;
  public:
   using Base::Base;
-  static const uint8_t w = 128;
-  static const uint8_t h = 32;
-  static const uint8_t PROGMEM splash[w*h/8];
+  static const uint8_t* const splash;
 };
 
 class Adafruit_SSD1306_128x64
-  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64> {
-  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64>;
+  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64,128,64> {
+  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64,128,64>;
  public:
   using Base::Base;
-  static const uint8_t w = 128;
-  static const uint8_t h = 64;
-  static const uint8_t PROGMEM splash[w*h/8];
+  static const uint8_t* const splash;
 };
 
 // The old name for the 128x32 driver.

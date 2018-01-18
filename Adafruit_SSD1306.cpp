@@ -351,8 +351,11 @@ void Adafruit_SSD1306_Core::display(void) {
   else
   {
     // save I2C bitrate
+#ifdef TWBR
     uint8_t twbrbackup = TWBR;
     TWBR = 12; // upgrade to 400KHz!
+#endif
+
     //Serial.println(TWBR, DEC);
     //Serial.println(TWSR & 0x3, DEC);
 
@@ -617,3 +620,10 @@ void Adafruit_SSD1306_Core::drawFastVLineInternal(int16_t x, int16_t __y, int16_
     }
   }
 }
+
+static const uint8_t PROGMEM splash96x16[96*16/8] = {};
+static const uint8_t PROGMEM splash128x32[128*32/8] = {};
+static const uint8_t PROGMEM splash128x64[128*64/8] = {};
+const uint8_t* const Adafruit_SSD1306_96x16::splash = splash96x16;
+const uint8_t* const Adafruit_SSD1306_128x32::splash = splash128x32;
+const uint8_t* const Adafruit_SSD1306_128x64::splash = splash128x64;
