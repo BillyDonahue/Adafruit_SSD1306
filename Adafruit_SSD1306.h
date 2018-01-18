@@ -182,50 +182,50 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
 };
 
 template <typename D, uint8_t WParam, uint8_t HParam>
-class Adafruit_SSD1306_Customize : public Adafruit_SSD1306_Core {
+class Adafruit_SSD1306_Customize_ : public Adafruit_SSD1306_Core {
  private:
-  Adafruit_SSD1306_Customize(PinConfig pins)
+  Adafruit_SSD1306_Customize_(PinConfig pins)
     : Adafruit_SSD1306_Core(pins, WParam, HParam, buffer, D::splash) { }
 
 public:
   // software SPI
-  Adafruit_SSD1306_Customize(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Customize(PinConfig(sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin)) {}
+  Adafruit_SSD1306_Customize_(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+    : Adafruit_SSD1306_Customize_(PinConfig(sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin)) {}
 
   // hardware SPI - we indicate DataCommand, ChipSelect, Reset
-  Adafruit_SSD1306_Customize(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Customize(PinConfig(dc_pin, rst_pin, cs_pin)) {}
+  Adafruit_SSD1306_Customize_(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+    : Adafruit_SSD1306_Customize_(PinConfig(dc_pin, rst_pin, cs_pin)) {}
 
   // I2C - we only indicate the reset pin!
-  explicit Adafruit_SSD1306_Customize(int8_t rst_pin)
-    : Adafruit_SSD1306_Customize(PinConfig(rst_pin)) {}
+  explicit Adafruit_SSD1306_Customize_(int8_t rst_pin)
+    : Adafruit_SSD1306_Customize_(PinConfig(rst_pin)) {}
 
   // I2C - without reset
-  Adafruit_SSD1306_Customize()
-    : Adafruit_SSD1306_Customize(PinConfig()) {}
+  Adafruit_SSD1306_Customize_()
+    : Adafruit_SSD1306_Customize_(PinConfig()) {}
 
   uint8_t buffer[WParam * HParam / 8];
 };
 
 class Adafruit_SSD1306_96x16
-  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16,96,16> {
-  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_96x16,96,16>;
+  : public Adafruit_SSD1306_Customize_<Adafruit_SSD1306_96x16,96,16> {
+  using Base = Adafruit_SSD1306_Customize_<Adafruit_SSD1306_96x16,96,16>;
  public:
   using Base::Base;
   static const uint8_t* const splash;
 };
 
 class Adafruit_SSD1306_128x32
-  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32,128,32> {
-  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x32,128,32>;
+  : public Adafruit_SSD1306_Customize_<Adafruit_SSD1306_128x32,128,32> {
+  using Base = Adafruit_SSD1306_Customize_<Adafruit_SSD1306_128x32,128,32>;
  public:
   using Base::Base;
   static const uint8_t* const splash;
 };
 
 class Adafruit_SSD1306_128x64
-  : public Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64,128,64> {
-  using Base = Adafruit_SSD1306_Customize<Adafruit_SSD1306_128x64,128,64>;
+  : public Adafruit_SSD1306_Customize_<Adafruit_SSD1306_128x64,128,64> {
+  using Base = Adafruit_SSD1306_Customize_<Adafruit_SSD1306_128x64,128,64>;
  public:
   using Base::Base;
   static const uint8_t* const splash;
