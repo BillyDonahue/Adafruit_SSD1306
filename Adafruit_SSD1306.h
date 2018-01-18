@@ -60,40 +60,14 @@ All text above, and the splash screen must be included in any redistribution
     SSD1306 Displays
     -----------------------------------------------------------------------
     The driver is used in multiple displays (128x64, 128x32, etc.).
-    Select the appropriate display below to create an appropriately
+    Select the appropriate display driver class to create an appropriately
     sized framebuffer, etc.
 
-    SSD1306_128_64  128x64 pixel display
+      Adafruit_SSD1306_128x64
+      Adafruit_SSD1306_128x32
+      Adafruit_SSD1306_96x16
+*/
 
-    SSD1306_128_32  128x32 pixel display
-
-    SSD1306_96_16
-
-    -----------------------------------------------------------------------*/
-//   #define SSD1306_128_64
-   #define SSD1306_128_32
-//   #define SSD1306_96_16
-/*=========================================================================*/
-
-#if defined SSD1306_128_64 && defined SSD1306_128_32
-  #error "Only one SSD1306 display can be specified at once in SSD1306.h"
-#endif
-#if !defined SSD1306_128_64 && !defined SSD1306_128_32 && !defined SSD1306_96_16
-  #error "At least one SSD1306 display must be specified in SSD1306.h"
-#endif
-
-#if defined SSD1306_128_64
-  #define SSD1306_LCDWIDTH                  128
-  #define SSD1306_LCDHEIGHT                 64
-#endif
-#if defined SSD1306_128_32
-  #define SSD1306_LCDWIDTH                  128
-  #define SSD1306_LCDHEIGHT                 32
-#endif
-#if defined SSD1306_96_16
-  #define SSD1306_LCDWIDTH                  96
-  #define SSD1306_LCDHEIGHT                 16
-#endif
 
 #define SSD1306_SETCONTRAST 0x81
 #define SSD1306_DISPLAYALLON_RESUME 0xA4
@@ -141,11 +115,11 @@ All text above, and the splash screen must be included in any redistribution
 #define SSD1306_VERTICAL_AND_RIGHT_HORIZONTAL_SCROLL 0x29
 #define SSD1306_VERTICAL_AND_LEFT_HORIZONTAL_SCROLL 0x2A
 
-class Adafruit_SSD1306 : public Adafruit_GFX {
+class Adafruit_SSD1306_Core : public Adafruit_GFX {
  public:
-  Adafruit_SSD1306(int8_t SID, int8_t SCLK, int8_t DC, int8_t RST, int8_t CS);
-  Adafruit_SSD1306(int8_t DC, int8_t RST, int8_t CS);
-  Adafruit_SSD1306(int8_t RST = -1);
+  Adafruit_SSD1306_Core(int8_t SID, int8_t SCLK, int8_t DC, int8_t RST, int8_t CS);
+  Adafruit_SSD1306_Core(int8_t DC, int8_t RST, int8_t CS);
+  Adafruit_SSD1306_Core(int8_t RST = -1);
 
   void begin(uint8_t switchvcc = SSD1306_SWITCHCAPVCC, uint8_t i2caddr = SSD1306_I2C_ADDRESS, bool reset=true);
   void ssd1306_command(uint8_t c);
@@ -180,7 +154,59 @@ class Adafruit_SSD1306 : public Adafruit_GFX {
 
   inline void drawFastVLineInternal(int16_t x, int16_t y, int16_t h, uint16_t color) __attribute__((always_inline));
   inline void drawFastHLineInternal(int16_t x, int16_t y, int16_t w, uint16_t color) __attribute__((always_inline));
-
 };
+
+template <typename D>
+class Adafruit_SSD1306_Basic : public Adafruit_SSD1306_Core {
+  D& asD() { return static_cast<D&>(*this); }
+
+  Adafruit_SSD1306_Basic(Pins pins)
+    : Adafruit_SSD1306_Core(D::w, D::h, asD().buffer, conn) {
+    loadSplash(D::splash);
+  }
+ 
+public:
+  // software SPI
+  Adafruit_SSD1306_Basic(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+    : Adafruit_SSD1306_Core(sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin) { }
+
+  // hardware SPI - we indicate DataCommand, ChipSelect, Reset
+  Adafruit_SSD1306_Basic(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+    : Adafruit_SSD1306_Core(dc_pin, rst_pin, cs_pin) { }
+
+  // I2C - we only indicate the reset pin!
+  explicit Adafruit_SSD1306_Basic(int8_t rst_pin)
+    : Adafruit_SSD1306_Core(rst_pin) { }
+
+  // I2C without reset
+  Adafruit_SSD1306_Basic()
+    : Adafruit_SSD1306_Core() { }
+};
+
+class Adafruit_SSD1306_96x16
+  : public Adafruit_SSD1306_Core::Adapted<Adafruit_SSD1306_96x16> {
+  using Base = Adafruit_SSD1306_Core::Adapted<Adafruit_SSD1306_96x16>;
+ public:
+  static const uint8_t w = 96;
+  static const uint8_t h = 16;
+  using Base::Base;
+};
+
+class Adafruit_SSD1306_128x32 : public Adafruit_SSD1306_Core {
+ public:
+  using Adafruit_SSD1306_Core::Adafruit_SSD1306_Core;
+};
+
+class Adafruit_SSD1306_128x64 : public Adafruit_SSD1306_Core {
+ public:
+  using Adafruit_SSD1306_Core::Adafruit_SSD1306_Core;
+  static const uint8_t w = 128;
+  static const uint8_t h = 64;
+  static const uint8_t PROGMEM splash[w * h / 8];
+  uint8_t buffer[w * h / 8];
+};
+
+// The old name for the 128x32 driver.
+using Adafruit_SSD1306 = Adafruit_SSD1306_128x32;
 
 #endif /* _Adafruit_SSD1306_H_ */

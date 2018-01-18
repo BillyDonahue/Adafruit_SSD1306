@@ -27,13 +27,13 @@ All text above, and the splash screen must be included in any redistribution
 #define OLED_DC    11
 #define OLED_CS    12
 #define OLED_RESET 13
-Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
+Adafruit_SSD1306_128x32 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 /* Uncomment this block to use hardware SPI
 #define OLED_DC     6
 #define OLED_CS     7
 #define OLED_RESET  8
-Adafruit_SSD1306 display(OLED_DC, OLED_RESET, OLED_CS);
+Adafruit_SSD1306_128x32 display(OLED_DC, OLED_RESET, OLED_CS);
 */
 
 #define NUMFLAKES 10
@@ -60,10 +60,6 @@ static const unsigned char PROGMEM logo16_glcd_bmp[] =
   B01111100, B11110000,
   B01110000, B01110000,
   B00000000, B00110000 };
-
-#if (SSD1306_LCDHEIGHT != 32)
-#error("Height incorrect, please fix Adafruit_SSD1306.h!");
-#endif
 
 void setup()   {                
   Serial.begin(9600);
