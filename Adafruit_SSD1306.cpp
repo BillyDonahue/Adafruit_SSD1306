@@ -160,11 +160,11 @@ const uint8_t* const Adafruit_SSD1306_128x64::splash = splash128x64;
 
 // the most basic function, set a single pixel
 void Adafruit_SSD1306_Core::drawPixel(int16_t x, int16_t y, uint16_t color) {
-  if ((x < 0) || (x >= width()) || (y < 0) || (y >= height()))
+  if ((x < 0) || (x >= _gfx->width()) || (y < 0) || (y >= _gfx->height()))
     return;
 
   // check rotation, move pixel around if necessary
-  switch (getRotation()) {
+  switch (_gfx->getRotation()) {
   case 1:
     ssd1306_swap(x, y);
     x = WIDTH - x - 1;
@@ -515,7 +515,7 @@ inline void Adafruit_SSD1306_Core::fastSPIwrite(uint8_t d) {
 
 void Adafruit_SSD1306_Core::drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) {
   boolean bSwap = false;
-  switch(rotation) {
+  switch(_gfx->getRotation()) {
     case 0:
       // 0 degree rotation, do nothing
       break;
@@ -584,7 +584,7 @@ void Adafruit_SSD1306_Core::drawFastHLineInternal(int16_t x, int16_t y, int16_t 
 
 void Adafruit_SSD1306_Core::drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) {
   bool bSwap = false;
-  switch(rotation) {
+  switch(_gfx->getRotation()) {
     case 0:
       break;
     case 1:

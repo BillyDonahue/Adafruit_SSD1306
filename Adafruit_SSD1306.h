@@ -115,7 +115,7 @@ All text above, and the splash screen must be included in any redistribution
 #define SSD1306_VERTICAL_AND_RIGHT_HORIZONTAL_SCROLL 0x29
 #define SSD1306_VERTICAL_AND_LEFT_HORIZONTAL_SCROLL 0x2A
 
-class Adafruit_SSD1306_Core : public Adafruit_GFX {
+class Adafruit_SSD1306_Core {
  public:
   struct PinConfig {
     PinConfig(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
@@ -130,14 +130,16 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
   };
 
   // 'splash' must be in the PROGMEM segment.
-  Adafruit_SSD1306_Core(PinConfig pins, uint8_t w, uint8_t h, uint8_t *buf, const uint8_t* splash)
-    : Adafruit_GFX(w, h),
-      sid(pins.sid),
+  Adafruit_SSD1306_Core(PinConfig pins, Adafruit_GFX* gfx, uint8_t w, uint8_t h, uint8_t *buf, const uint8_t* splash)
+    : sid(pins.sid),
       sclk(pins.sclk),
       dc(pins.dc),
       rst(pins.rst),
       cs(pins.cs),
       hwSPI(pins.hwSPI),
+      _gfx(gfx),
+      WIDTH(w),
+      HEIGHT(h),
       buffer(buf) {
     uint8_t* bp = buffer;
     for (uint16_t i = WIDTH * HEIGHT / 8; i--; ) {
@@ -160,11 +162,11 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
 
   void dim(boolean dim);
 
-  // Adafruit_GFX virtuals
-  void invertDisplay(boolean i) override;
-  void drawPixel(int16_t x, int16_t y, uint16_t color) override;
-  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) override;
-  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) override;
+  // Adafruit_GFX virtuals, nonvirtual here
+  void invertDisplay(boolean i);
+  void drawPixel(int16_t x, int16_t y, uint16_t color);
+  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
+  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
 
  private:
   int8_t _i2caddr, _vccstate, sid, sclk, dc, rst, cs;
@@ -175,6 +177,9 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
   PortReg *mosiport, *clkport, *csport, *dcport;
   PortMask mosipinmask, clkpinmask, cspinmask, dcpinmask;
 #endif
+  Adafruit_GFX* _gfx;
+  uint8_t WIDTH;
+  uint8_t HEIGHT;
   uint8_t* buffer;
 
   inline void drawFastVLineInternal(int16_t x, int16_t y, int16_t h, uint16_t color) __attribute__((always_inline));
@@ -182,27 +187,44 @@ class Adafruit_SSD1306_Core : public Adafruit_GFX {
 };
 
 template <typename D, uint8_t WParam, uint8_t HParam>
-class Adafruit_SSD1306_Customize_ : public Adafruit_SSD1306_Core {
+class Adafruit_SSD1306_Customize_ : public Adafruit_GFX, public Adafruit_SSD1306_Core {
  private:
-  Adafruit_SSD1306_Customize_(PinConfig pins)
-    : Adafruit_SSD1306_Core(pins, WParam, HParam, buffer, D::splash) { }
+  Adafruit_SSD1306_Core& core() { return *this; }
 
-public:
+  Adafruit_SSD1306_Customize_(PinConfig pins)
+    : Adafruit_GFX(WParam, HParam),
+      Adafruit_SSD1306_Core(pins, this, WParam, HParam, buffer, D::splash) { }
+
+ public:
   // software SPI
   Adafruit_SSD1306_Customize_(int8_t sid_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Customize_(PinConfig(sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin)) {}
+    : Adafruit_SSD1306_Customize_(Adafruit_SSD1306_Core::PinConfig(sid_pin, sclk_pin, dc_pin, rst_pin, cs_pin)) {}
 
   // hardware SPI - we indicate DataCommand, ChipSelect, Reset
   Adafruit_SSD1306_Customize_(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
-    : Adafruit_SSD1306_Customize_(PinConfig(dc_pin, rst_pin, cs_pin)) {}
+    : Adafruit_SSD1306_Customize_(Adafruit_SSD1306_Core::PinConfig(dc_pin, rst_pin, cs_pin)) {}
 
   // I2C - we only indicate the reset pin!
   explicit Adafruit_SSD1306_Customize_(int8_t rst_pin)
-    : Adafruit_SSD1306_Customize_(PinConfig(rst_pin)) {}
+    : Adafruit_SSD1306_Customize_(Adafruit_SSD1306_Core::PinConfig(rst_pin)) {}
 
   // I2C - without reset
   Adafruit_SSD1306_Customize_()
-    : Adafruit_SSD1306_Customize_(PinConfig()) {}
+    : Adafruit_SSD1306_Customize_(Adafruit_SSD1306_Core::PinConfig()) {}
+
+  // Adafruit_GFX virtuals
+  void invertDisplay(boolean i) override {
+    core().invertDisplay(i);
+  }
+  void drawPixel(int16_t x, int16_t y, uint16_t color) override {
+    core().drawPixel(x, y, color);
+  }
+  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) override {
+    core().drawFastVLine(x, y, h, color);
+  }
+  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) override {
+    core().drawFastHLine(x, y, w, color);
+  }
 
   uint8_t buffer[WParam * HParam / 8];
 };
